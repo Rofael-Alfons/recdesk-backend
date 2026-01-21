@@ -1,0 +1,410 @@
+// RecDesk AI - Database Schema
+// Prisma schema for MVP (Email auto-capture, CV parsing, Candidate scoring)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// COMPANY & USER MANAGEMENT
+// ============================================
+
+model Company {
+  id        String   @id @default(uuid())
+  name      String
+  domain    String?  @unique
+  mode      CompanyMode @default(FULL_ATS)
+  plan      PlanType @default(STARTER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users            User[]
+  jobs             Job[]
+  candidates       Candidate[]
+  emailConnections EmailConnection[]
+
+  @@map("companies")
+}
+
+enum CompanyMode {
+  FULL_ATS
+  PRE_ATS
+}
+
+enum PlanType {
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+  PRE_ATS_SCREENING
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  role         UserRole @default(RECRUITER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  candidateNotes    CandidateNote[]
+  candidateActions  CandidateAction[]
+  emailsSent        EmailSent[]
+  refreshTokens     RefreshToken[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  RECRUITER
+  INTERVIEWER
+  VIEWER
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// ============================================
+// JOBS
+// ============================================
+
+model Job {
+  id          String    @id @default(uuid())
+  title       String
+  description String?
+  status      JobStatus @default(ACTIVE)
+
+  // Requirements stored as JSONB
+  requirements     Json?  // { skills: [], experienceLevel, qualifications, etc. }
+  requiredSkills   String[]
+  preferredSkills  String[]
+  experienceLevel  ExperienceLevel @default(JUNIOR)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  candidates      Candidate[]
+  candidateScores CandidateScore[]
+  pipelineStages  PipelineStage[]
+
+  @@map("jobs")
+}
+
+enum JobStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  CLOSED
+}
+
+enum ExperienceLevel {
+  JUNIOR
+  MID
+  SENIOR
+  LEAD
+}
+
+model PipelineStage {
+  id         String @id @default(uuid())
+  name       String
+  orderIndex Int
+  color      String @default("#3B82F6")
+  isDefault  Boolean @default(false)
+
+  jobId String
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  candidates CandidateStage[]
+
+  @@map("pipeline_stages")
+}
+
+// ============================================
+// CANDIDATES
+// ============================================
+
+model Candidate {
+  id     String          @id @default(uuid())
+  source CandidateSource @default(UPLOAD)
+  status CandidateStatus @default(NEW)
+
+  // Personal Info
+  fullName     String
+  email        String?
+  phone        String?
+  location     String?
+  linkedinUrl  String?
+  githubUrl    String?
+  portfolioUrl String?
+
+  // CV Files
+  cvFileUrl            String
+  cvFileName           String?
+  cvText               String?  // Extracted text from CV
+  extractionConfidence Int?     // 0-100
+
+  // Parsed Data (JSONB)
+  education      Json?
+  experience     Json?
+  skills         Json?
+  projects       Json?
+  certifications Json?
+  languages      Json?
+
+  // Scoring
+  overallScore   Int?     // 0-100
+  scoreBreakdown Json?    // Detailed component scores
+  aiSummary      String?  // AI-generated candidate summary
+
+  // Tags
+  tags String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  jobId String?
+  job   Job?   @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  emailImportId String?       @unique
+  emailImport   EmailImport?  @relation(fields: [emailImportId], references: [id])
+
+  scores         CandidateScore[]
+  stageHistory   CandidateStage[]
+  notes          CandidateNote[]
+  actions        CandidateAction[]
+  emailsSent     EmailSent[]
+
+  @@index([companyId, overallScore])
+  @@index([companyId, createdAt])
+  @@index([email])
+  @@map("candidates")
+}
+
+enum CandidateSource {
+  EMAIL
+  UPLOAD
+  JOB_BOARD
+  REFERRAL
+  MANUAL
+}
+
+enum CandidateStatus {
+  NEW
+  SCREENING
+  SHORTLISTED
+  INTERVIEWING
+  OFFERED
+  HIRED
+  REJECTED
+  WITHDRAWN
+}
+
+model CandidateScore {
+  id String @id @default(uuid())
+
+  // Scores (0-100)
+  overallScore      Int
+  skillsMatchScore  Int?
+  experienceScore   Int?
+  educationScore    Int?
+  growthScore       Int?
+  bonusScore        Int?
+
+  // Explanations
+  scoreExplanation Json?
+  recommendation   String?
+
+  // Metadata
+  algorithmVersion String @default("v1.0")
+  scoredAt         DateTime @default(now())
+
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  jobId String
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([candidateId, jobId])
+  @@map("candidate_scores")
+}
+
+model CandidateStage {
+  id      String   @id @default(uuid())
+  movedAt DateTime @default(now())
+
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  stageId String
+  stage   PipelineStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  @@map("candidate_stages")
+}
+
+model CandidateNote {
+  id        String   @id @default(uuid())
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("candidate_notes")
+}
+
+model CandidateAction {
+  id        String   @id @default(uuid())
+  action    String   // e.g., "moved_to_stage", "shortlisted", "rejected", "email_sent"
+  details   Json?
+  createdAt DateTime @default(now())
+
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("candidate_actions")
+}
+
+// ============================================
+// EMAIL INTEGRATION
+// ============================================
+
+model EmailConnection {
+  id           String              @id @default(uuid())
+  provider     EmailProvider
+  email        String
+  accessToken  String              // Encrypted
+  refreshToken String?             // Encrypted
+  expiresAt    DateTime?
+  isActive     Boolean             @default(true)
+  lastSyncAt   DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  emailImports EmailImport[]
+
+  @@unique([companyId, email])
+  @@map("email_connections")
+}
+
+enum EmailProvider {
+  GMAIL
+  OUTLOOK
+}
+
+model EmailImport {
+  id              String            @id @default(uuid())
+  messageId       String            @unique  // Email message ID from provider
+  subject         String?
+  senderEmail     String
+  senderName      String?
+  receivedAt      DateTime
+
+  // Classification
+  isJobApplication  Boolean @default(false)
+  confidence        Int?    // 0-100
+  detectedPosition  String?
+
+  // Email content
+  bodyText      String?
+  bodyHtml      String?
+
+  // Processing status
+  status        EmailImportStatus @default(PENDING)
+  processedAt   DateTime?
+  errorMessage  String?
+
+  createdAt DateTime @default(now())
+
+  emailConnectionId String
+  emailConnection   EmailConnection @relation(fields: [emailConnectionId], references: [id], onDelete: Cascade)
+
+  candidate Candidate?
+
+  @@map("email_imports")
+}
+
+enum EmailImportStatus {
+  PENDING
+  PROCESSING
+  IMPORTED
+  SKIPPED
+  FAILED
+}
+
+// ============================================
+// EMAIL COMMUNICATION
+// ============================================
+
+model EmailTemplate {
+  id        String            @id @default(uuid())
+  name      String
+  subject   String
+  body      String
+  type      EmailTemplateType
+  isDefault Boolean           @default(false)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@map("email_templates")
+}
+
+enum EmailTemplateType {
+  REJECTION
+  INTERVIEW_INVITE
+  OFFER
+  FOLLOW_UP
+  CUSTOM
+}
+
+model EmailSent {
+  id        String   @id @default(uuid())
+  subject   String
+  body      String
+  sentAt    DateTime @default(now())
+  openedAt  DateTime?
+  clickedAt DateTime?
+
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  sentById String
+  sentBy   User   @relation(fields: [sentById], references: [id], onDelete: Cascade)
+
+  @@map("emails_sent")
+}
