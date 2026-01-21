@@ -1,5 +1,5 @@
 export default () => ({
-  port: parseInt(process.env.PORT, 10) || 3000,
+  port: parseInt(process.env.PORT || '3000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   apiPrefix: process.env.API_PREFIX || 'api',
 
@@ -8,13 +8,13 @@ export default () => ({
   },
 
   jwt: {
-    secret: process.env.JWT_SECRET,
-    accessExpiration: process.env.JWT_ACCESS_EXPIRATION || '15m',
-    refreshExpiration: process.env.JWT_REFRESH_EXPIRATION || '7d',
+    secret: process.env.JWT_SECRET || 'your-super-secret-key-change-in-production',
+    accessExpirationSeconds: parseInt(process.env.JWT_ACCESS_EXPIRATION_SECONDS || '900', 10), // 15 minutes
+    refreshExpirationSeconds: parseInt(process.env.JWT_REFRESH_EXPIRATION_SECONDS || '604800', 10), // 7 days
   },
 
   bcrypt: {
-    saltRounds: parseInt(process.env.BCRYPT_SALT_ROUNDS, 10) || 10,
+    saltRounds: parseInt(process.env.BCRYPT_SALT_ROUNDS || '10', 10),
   },
 
   aws: {
@@ -26,7 +26,7 @@ export default () => ({
 
   redis: {
     host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT, 10) || 6379,
+    port: parseInt(process.env.REDIS_PORT || '6379', 10),
     password: process.env.REDIS_PASSWORD,
   },
 

@@ -31,7 +31,7 @@ export class AuthService {
     }
 
     // Hash password
-    const saltRounds = this.configService.get<number>('bcrypt.saltRounds');
+    const saltRounds = this.configService.get<number>('bcrypt.saltRounds') || 12;
     const passwordHash = await bcrypt.hash(dto.password, saltRounds);
 
     // Create company and user in a transaction
@@ -183,14 +183,15 @@ export class AuthService {
       role: user.role,
     };
 
+    const accessExpirationSeconds = this.configService.get<number>('jwt.accessExpirationSeconds') || 900;
     const accessToken = this.jwtService.sign(payload, {
-      expiresIn: this.configService.get<string>('jwt.accessExpiration'),
+      expiresIn: accessExpirationSeconds,
     });
 
     // Generate refresh token
     const refreshToken = uuidv4();
-    const refreshExpiration = this.configService.get<string>('jwt.refreshExpiration');
-    const expiresAt = this.calculateExpiration(refreshExpiration);
+    const refreshExpirationSeconds = this.configService.get<number>('jwt.refreshExpirationSeconds') || 604800;
+    const expiresAt = new Date(Date.now() + refreshExpirationSeconds * 1000);
 
     await this.prisma.refreshToken.create({
       data: {
@@ -206,22 +207,4 @@ export class AuthService {
     };
   }
 
-  private calculateExpiration(expiration: string): Date {
-    const match = expiration.match(/^(\d+)([smhd])$/);
-    if (!match) {
-      return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // Default 7 days
-    }
-
-    const value = parseInt(match[1], 10);
-    const unit = match[2];
-
-    const multipliers: Record<string, number> = {
-      s: 1000,
-      m: 60 * 1000,
-      h: 60 * 60 * 1000,
-      d: 24 * 60 * 60 * 1000,
-    };
-
-    return new Date(Date.now() + value * multipliers[unit]);
-  }
 }
