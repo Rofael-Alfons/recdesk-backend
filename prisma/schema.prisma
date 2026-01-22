@@ -57,10 +57,11 @@ model User {
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  candidateNotes    CandidateNote[]
-  candidateActions  CandidateAction[]
-  emailsSent        EmailSent[]
-  refreshTokens     RefreshToken[]
+  candidateNotes       CandidateNote[]
+  candidateActions     CandidateAction[]
+  emailsSent           EmailSent[]
+  refreshTokens        RefreshToken[]
+  passwordResetTokens  PasswordResetToken[]
 
   @@map("users")
 }
@@ -82,6 +83,19 @@ model RefreshToken {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
 }
 
 // ============================================
@@ -309,6 +323,7 @@ model EmailConnection {
   refreshToken String?             // Encrypted
   expiresAt    DateTime?
   isActive     Boolean             @default(true)
+  autoImport   Boolean             @default(true)  // Auto-import job application emails
   lastSyncAt   DateTime?
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt

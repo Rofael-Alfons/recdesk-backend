@@ -30,8 +30,19 @@ export default () => ({
     password: process.env.REDIS_PASSWORD,
   },
 
+  // AI Provider Configuration
+  // Set AI_PROVIDER to 'groq' for development (cost-effective) or 'openai' for production
+  ai: {
+    provider: process.env.AI_PROVIDER || 'groq', // 'groq' (default for dev) or 'openai' (for prod)
+  },
+
   openai: {
     apiKey: process.env.OPENAI_API_KEY,
+  },
+
+  groq: {
+    apiKey: process.env.GROQ_API_KEY,
+    model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile', // Fast and capable model
   },
 
   sendgrid: {
@@ -42,10 +53,12 @@ export default () => ({
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackUrl: process.env.GOOGLE_CALLBACK_URL,
+    redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/integrations/gmail/callback',
   },
 
-  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3001',
+  frontend: {
+    url: process.env.FRONTEND_URL || 'http://localhost:3001',
+  },
 
   encryption: {
     key: process.env.ENCRYPTION_KEY,

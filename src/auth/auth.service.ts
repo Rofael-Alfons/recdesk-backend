@@ -9,8 +9,9 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
-import { RegisterDto, LoginDto, RefreshTokenDto } from './dto';
+import { RegisterDto, LoginDto, RefreshTokenDto, ForgotPasswordDto, ResetPasswordDto } from './dto';
 import { JwtPayload } from './strategies/jwt.strategy';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -133,7 +134,8 @@ export class AuthService {
     }
 
     if (new Date() > refreshToken.expiresAt) {
-      await this.prisma.refreshToken.delete({
+      // Use deleteMany to avoid error if already deleted
+      await this.prisma.refreshToken.deleteMany({
         where: { id: refreshToken.id },
       });
       throw new UnauthorizedException('Refresh token expired');
@@ -143,8 +145,8 @@ export class AuthService {
       throw new UnauthorizedException('Account is deactivated');
     }
 
-    // Delete old refresh token
-    await this.prisma.refreshToken.delete({
+    // Delete old refresh token (use deleteMany to avoid error if already deleted)
+    await this.prisma.refreshToken.deleteMany({
       where: { id: refreshToken.id },
     });
 
@@ -204,6 +206,99 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
+    };
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email.toLowerCase() },
+    });
+
+    // Always return success to prevent email enumeration
+    if (!user || !user.isActive) {
+      return {
+        message: 'If an account exists with this email, a password reset link has been sent.',
+      };
+    }
+
+    // Invalidate any existing reset tokens for this user
+    await this.prisma.passwordResetToken.updateMany({
+      where: { userId: user.id, used: false },
+      data: { used: true },
+    });
+
+    // Generate a secure random token
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiry
+
+    await this.prisma.passwordResetToken.create({
+      data: {
+        token,
+        userId: user.id,
+        expiresAt,
+      },
+    });
+
+    // TODO: Send email with reset link
+    // For now, log the token (in production, this would be sent via email only)
+    const frontendUrl = this.configService.get<string>('frontend.url') || 'http://localhost:3000';
+    const resetLink = `${frontendUrl}/auth/reset-password?token=${token}`;
+
+    console.log(`[DEV] Password reset link for ${user.email}: ${resetLink}`);
+
+    return {
+      message: 'If an account exists with this email, a password reset link has been sent.',
+      // Only include in development
+      ...(process.env.NODE_ENV !== 'production' && { resetLink }),
+    };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: { token: dto.token },
+      include: { user: true },
+    });
+
+    if (!resetToken) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    if (resetToken.used) {
+      throw new BadRequestException('This reset link has already been used');
+    }
+
+    if (new Date() > resetToken.expiresAt) {
+      throw new BadRequestException('Reset link has expired');
+    }
+
+    if (!resetToken.user.isActive) {
+      throw new BadRequestException('Account is deactivated');
+    }
+
+    // Hash new password
+    const saltRounds = this.configService.get<number>('bcrypt.saltRounds') || 12;
+    const passwordHash = await bcrypt.hash(dto.newPassword, saltRounds);
+
+    // Update password and mark token as used in a transaction
+    await this.prisma.$transaction(async (prisma) => {
+      await prisma.user.update({
+        where: { id: resetToken.userId },
+        data: { passwordHash },
+      });
+
+      await prisma.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: { used: true },
+      });
+
+      // Invalidate all refresh tokens for security
+      await prisma.refreshToken.deleteMany({
+        where: { userId: resetToken.userId },
+      });
+    });
+
+    return {
+      message: 'Password has been reset successfully. Please login with your new password.',
     };
   }
 
