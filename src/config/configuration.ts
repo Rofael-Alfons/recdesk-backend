@@ -63,4 +63,19 @@ export default () => ({
   encryption: {
     key: process.env.ENCRYPTION_KEY,
   },
+
+  stripe: {
+    secretKey: process.env.STRIPE_SECRET_KEY,
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+    starterPriceId: process.env.STRIPE_STARTER_PRICE_ID,
+    professionalPriceId: process.env.STRIPE_PROFESSIONAL_PRICE_ID,
+    enterprisePriceId: process.env.STRIPE_ENTERPRISE_PRICE_ID,
+  },
+
+  // Email Prefilter Configuration
+  // Reduces AI API costs by 50-80% by skipping obvious non-job-application emails
+  prefilter: {
+    enabled: process.env.PREFILTER_ENABLED !== 'false', // Default: true
+    autoClassifyEnabled: process.env.PREFILTER_AUTO_CLASSIFY_ENABLED !== 'false', // Default: true
+  },
 });

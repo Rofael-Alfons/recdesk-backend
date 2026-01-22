@@ -15,12 +15,12 @@ export declare class IntegrationsService {
     }>;
     getEmailConnections(companyId: string): Promise<{
         id: string;
-        provider: import("@prisma/client").$Enums.EmailProvider;
+        createdAt: Date;
         email: string;
         isActive: boolean;
+        provider: import("@prisma/client").$Enums.EmailProvider;
         autoImport: boolean;
         lastSyncAt: Date | null;
-        createdAt: Date;
     }[]>;
     disconnectEmail(connectionId: string, companyId: string): Promise<{
         message: string;
@@ -31,11 +31,11 @@ export declare class IntegrationsService {
         autoImport?: boolean;
     }): Promise<{
         id: string;
-        provider: import("@prisma/client").$Enums.EmailProvider;
+        createdAt: Date;
         email: string;
         isActive: boolean;
+        provider: import("@prisma/client").$Enums.EmailProvider;
         autoImport: boolean;
         lastSyncAt: Date | null;
-        createdAt: Date;
     }>;
 }

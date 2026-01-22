@@ -15,18 +15,21 @@ datasource db {
 // ============================================
 
 model Company {
-  id        String   @id @default(uuid())
-  name      String
-  domain    String?  @unique
-  mode      CompanyMode @default(FULL_ATS)
-  plan      PlanType @default(STARTER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String   @id @default(uuid())
+  name             String
+  domain           String?  @unique
+  mode             CompanyMode @default(FULL_ATS)
+  plan             PlanType @default(STARTER)
+  stripeCustomerId String?  @unique  // Stripe customer ID
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   users            User[]
   jobs             Job[]
   candidates       Candidate[]
   emailConnections EmailConnection[]
+  subscription     Subscription?
+  usageRecords     UsageRecord[]
 
   @@map("companies")
 }
@@ -316,17 +319,18 @@ model CandidateAction {
 // ============================================
 
 model EmailConnection {
-  id           String              @id @default(uuid())
-  provider     EmailProvider
-  email        String
-  accessToken  String              // Encrypted
-  refreshToken String?             // Encrypted
-  expiresAt    DateTime?
-  isActive     Boolean             @default(true)
-  autoImport   Boolean             @default(true)  // Auto-import job application emails
-  lastSyncAt   DateTime?
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
+  id            String              @id @default(uuid())
+  provider      EmailProvider
+  email         String
+  accessToken   String              // Encrypted
+  refreshToken  String?             // Encrypted
+  expiresAt     DateTime?
+  isActive      Boolean             @default(true)
+  autoImport    Boolean             @default(true)  // Auto-import job application emails
+  lastSyncAt    DateTime?
+  lastHistoryId String?             // Gmail history ID for incremental sync
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -363,6 +367,7 @@ model EmailImport {
   status        EmailImportStatus @default(PENDING)
   processedAt   DateTime?
   errorMessage  String?
+  skipReason    String?   // Reason for skipping (prefilter or AI classification)
 
   createdAt DateTime @default(now())
 
@@ -422,4 +427,108 @@ model EmailSent {
   sentBy   User   @relation(fields: [sentById], references: [id], onDelete: Cascade)
 
   @@map("emails_sent")
+}
+
+// ============================================
+// BILLING & SUBSCRIPTIONS
+// ============================================
+
+model SubscriptionPlan {
+  id            String   @id @default(uuid())
+  name          String   // "Free Trial", "Starter", "Professional", "Enterprise"
+  stripePriceId String?  @unique  // Stripe price ID (null for free trial)
+  monthlyPrice  Int      // Price in cents (0 for free trial)
+  annualPrice   Int?     // Annual price in cents (with discount)
+  cvLimit       Int      // CVs per month (-1 for unlimited)
+  userLimit     Int      // Team members (-1 for unlimited)
+  features      Json     // Feature flags { emailIntegration: true, ... }
+  isActive      Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
+}
+
+model Subscription {
+  id                   String             @id @default(uuid())
+  stripeSubscriptionId String?            @unique  // Null for free trial
+  status               SubscriptionStatus @default(TRIALING)
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean            @default(false)
+  trialEndsAt          DateTime?          // For free trial tracking
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  companyId String  @unique
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  planId String
+  plan   SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  @@map("subscriptions")
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+}
+
+model UsageRecord {
+  id          String    @id @default(uuid())
+  type        UsageType
+  count       Int       @default(1)
+  periodStart DateTime
+  periodEnd   DateTime
+  createdAt   DateTime  @default(now())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, type, periodStart])
+  @@map("usage_records")
+}
+
+enum UsageType {
+  CV_PROCESSED
+  AI_PARSING_CALL
+  AI_SCORING_CALL
+  EMAIL_SENT
+  EMAIL_IMPORTED
+}
+
+model Invoice {
+  id              String        @id @default(uuid())
+  stripeInvoiceId String        @unique
+  amountDue       Int           // In cents
+  amountPaid      Int           // In cents
+  currency        String        @default("usd")
+  status          InvoiceStatus
+  invoicePdf      String?       // URL to PDF
+  hostedInvoiceUrl String?      // Stripe hosted invoice URL
+  periodStart     DateTime
+  periodEnd       DateTime
+  paidAt          DateTime?
+  createdAt       DateTime      @default(now())
+
+  companyId String
+  
+  @@index([companyId])
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
 }

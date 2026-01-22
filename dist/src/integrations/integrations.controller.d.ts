@@ -9,12 +9,12 @@ export declare class IntegrationsController {
     constructor(integrationsService: IntegrationsService, configService: ConfigService);
     getConnections(user: CurrentUserData): Promise<{
         id: string;
-        provider: import("@prisma/client").$Enums.EmailProvider;
+        createdAt: Date;
         email: string;
         isActive: boolean;
+        provider: import("@prisma/client").$Enums.EmailProvider;
         autoImport: boolean;
         lastSyncAt: Date | null;
-        createdAt: Date;
     }[]>;
     connectGmail(user: CurrentUserData): Promise<{
         authUrl: any;
@@ -22,12 +22,12 @@ export declare class IntegrationsController {
     gmailCallback(code: string, state: string, error: string, res: Response): Promise<void>;
     updateConnection(id: string, updateDto: UpdateConnectionDto, user: CurrentUserData): Promise<{
         id: string;
-        provider: import("@prisma/client").$Enums.EmailProvider;
+        createdAt: Date;
         email: string;
         isActive: boolean;
+        provider: import("@prisma/client").$Enums.EmailProvider;
         autoImport: boolean;
         lastSyncAt: Date | null;
-        createdAt: Date;
     }>;
     disconnect(id: string, user: CurrentUserData): Promise<{
         message: string;

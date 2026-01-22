@@ -49,5 +49,16 @@ declare const _default: () => {
     encryption: {
         key: string | undefined;
     };
+    stripe: {
+        secretKey: string | undefined;
+        webhookSecret: string | undefined;
+        starterPriceId: string | undefined;
+        professionalPriceId: string | undefined;
+        enterprisePriceId: string | undefined;
+    };
+    prefilter: {
+        enabled: boolean;
+        autoClassifyEnabled: boolean;
+    };
 };
 export default _default;

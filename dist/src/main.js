@@ -6,7 +6,9 @@ const config_1 = require("@nestjs/config");
 const swagger_1 = require("@nestjs/swagger");
 const app_module_1 = require("./app.module");
 async function bootstrap() {
-    const app = await core_1.NestFactory.create(app_module_1.AppModule);
+    const app = await core_1.NestFactory.create(app_module_1.AppModule, {
+        rawBody: true,
+    });
     const configService = app.get(config_1.ConfigService);
     const apiPrefix = configService.get('apiPrefix') || 'api';
     app.setGlobalPrefix(apiPrefix);
@@ -34,6 +36,8 @@ async function bootstrap() {
         .addTag('Jobs', 'Job posting endpoints')
         .addTag('Candidates', 'Candidate management endpoints')
         .addTag('Email Integration', 'Email integration endpoints')
+        .addTag('Billing', 'Billing and subscription endpoints')
+        .addTag('Webhooks', 'Webhook endpoints for external services')
         .build();
     const document = swagger_1.SwaggerModule.createDocument(app, config);
     swagger_1.SwaggerModule.setup(`${apiPrefix}/docs`, app, document);

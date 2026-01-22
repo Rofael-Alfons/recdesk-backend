@@ -5,7 +5,9 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true, // Enable raw body for Stripe webhook signature verification
+  });
   const configService = app.get(ConfigService);
 
   // Global prefix
@@ -43,6 +45,8 @@ async function bootstrap() {
     .addTag('Jobs', 'Job posting endpoints')
     .addTag('Candidates', 'Candidate management endpoints')
     .addTag('Email Integration', 'Email integration endpoints')
+    .addTag('Billing', 'Billing and subscription endpoints')
+    .addTag('Webhooks', 'Webhook endpoints for external services')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

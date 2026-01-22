@@ -27,6 +27,7 @@ export declare class JwtStrategy extends JwtStrategy_base {
             domain: string | null;
             mode: import("@prisma/client").$Enums.CompanyMode;
             plan: import("@prisma/client").$Enums.PlanType;
+            stripeCustomerId: string | null;
             createdAt: Date;
             updatedAt: Date;
         };

@@ -55,12 +55,12 @@ export declare class JobsController {
     }>;
     findOne(id: string, user: CurrentUserData): Promise<{
         pipelineStages: {
-            jobId: string;
             id: string;
             name: string;
             orderIndex: number;
             color: string;
             isDefault: boolean;
+            jobId: string;
         }[];
         id: any;
         title: any;

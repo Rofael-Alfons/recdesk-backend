@@ -42,12 +42,12 @@ export declare class JobsService {
     }>;
     findOne(jobId: string, companyId: string): Promise<{
         pipelineStages: {
-            jobId: string;
             id: string;
             name: string;
             orderIndex: number;
             color: string;
             isDefault: boolean;
+            jobId: string;
         }[];
         id: any;
         title: any;

@@ -38,18 +38,18 @@ let IntegrationsController = class IntegrationsController {
     async gmailCallback(code, state, error, res) {
         const frontendUrl = this.configService.get('frontend.url') || 'http://localhost:3000';
         if (error) {
-            return res.redirect(`${frontendUrl}/settings/integrations?error=${encodeURIComponent(error)}`);
+            return res.redirect(`${frontendUrl}/integrations?error=${encodeURIComponent(error)}`);
         }
         if (!code || !state) {
-            return res.redirect(`${frontendUrl}/settings/integrations?error=missing_params`);
+            return res.redirect(`${frontendUrl}/integrations?error=missing_params`);
         }
         try {
             const result = await this.integrationsService.handleGmailCallback(code, state);
-            return res.redirect(`${frontendUrl}/settings/integrations?success=true&email=${encodeURIComponent(result.email)}`);
+            return res.redirect(`${frontendUrl}/integrations?success=true&email=${encodeURIComponent(result.email)}`);
         }
         catch (err) {
             console.error('Gmail callback error:', err);
-            return res.redirect(`${frontendUrl}/settings/integrations?error=connection_failed`);
+            return res.redirect(`${frontendUrl}/integrations?error=connection_failed`);
         }
     }
     async updateConnection(id, updateDto, user) {
@@ -71,7 +71,7 @@ __decorate([
 ], IntegrationsController.prototype, "getConnections", null);
 __decorate([
     (0, common_1.Get)('gmail/connect'),
-    (0, roles_decorator_1.Roles)(client_1.UserRole.ADMIN),
+    (0, roles_decorator_1.Roles)(client_1.UserRole.ADMIN, client_1.UserRole.RECRUITER),
     (0, swagger_1.ApiOperation)({ summary: 'Get Gmail OAuth URL' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'OAuth URL generated' }),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),

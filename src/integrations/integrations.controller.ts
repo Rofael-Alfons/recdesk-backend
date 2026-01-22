@@ -42,7 +42,7 @@ export class IntegrationsController {
   }
 
   @Get('gmail/connect')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
   @ApiOperation({ summary: 'Get Gmail OAuth URL' })
   @ApiResponse({ status: 200, description: 'OAuth URL generated' })
   async connectGmail(@CurrentUser() user: CurrentUserData) {
@@ -62,21 +62,21 @@ export class IntegrationsController {
     const frontendUrl = this.configService.get<string>('frontend.url') || 'http://localhost:3000';
 
     if (error) {
-      return res.redirect(`${frontendUrl}/settings/integrations?error=${encodeURIComponent(error)}`);
+      return res.redirect(`${frontendUrl}/integrations?error=${encodeURIComponent(error)}`);
     }
 
     if (!code || !state) {
-      return res.redirect(`${frontendUrl}/settings/integrations?error=missing_params`);
+      return res.redirect(`${frontendUrl}/integrations?error=missing_params`);
     }
 
     try {
       const result = await this.integrationsService.handleGmailCallback(code, state);
       return res.redirect(
-        `${frontendUrl}/settings/integrations?success=true&email=${encodeURIComponent(result.email)}`,
+        `${frontendUrl}/integrations?success=true&email=${encodeURIComponent(result.email)}`,
       );
     } catch (err) {
       console.error('Gmail callback error:', err);
-      return res.redirect(`${frontendUrl}/settings/integrations?error=connection_failed`);
+      return res.redirect(`${frontendUrl}/integrations?error=connection_failed`);
     }
   }
 
