@@ -14,6 +14,9 @@ import { UploadModule } from './upload/upload.module';
 import { QueueModule } from './queue/queue.module';
 import { EmailMonitorModule } from './email-monitor/email-monitor.module';
 import { BillingModule } from './billing/billing.module';
+import { EmailTemplatesModule } from './email-templates/email-templates.module';
+import { EmailSendingModule } from './email-sending/email-sending.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import configuration from './config/configuration';
@@ -41,6 +44,9 @@ const isRedisConfigured = (): boolean => {
     UploadModule,
     EmailMonitorModule,
     BillingModule,
+    EmailTemplatesModule,
+    EmailSendingModule,
+    NotificationsModule,
     // Only import QueueModule if Redis is configured
     ...(isRedisConfigured() ? [QueueModule] : []),
   ],

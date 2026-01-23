@@ -30,6 +30,8 @@ model Company {
   emailConnections EmailConnection[]
   subscription     Subscription?
   usageRecords     UsageRecord[]
+  emailTemplates   EmailTemplate[]
+  notifications    Notification[]
 
   @@map("companies")
 }
@@ -65,6 +67,7 @@ model User {
   emailsSent           EmailSent[]
   refreshTokens        RefreshToken[]
   passwordResetTokens  PasswordResetToken[]
+  notifications        Notification[]
 
   @@map("users")
 }
@@ -401,6 +404,9 @@ model EmailTemplate {
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
 
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   @@map("email_templates")
 }
 
@@ -531,4 +537,52 @@ enum InvoiceStatus {
   PAID
   VOID
   UNCOLLECTIBLE
+}
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
+
+enum NotificationType {
+  EMAIL_IMPORT_COMPLETE
+  CV_PROCESSING_COMPLETE
+  BULK_UPLOAD_COMPLETE
+  USAGE_WARNING_80
+  USAGE_WARNING_90
+  USAGE_LIMIT_REACHED
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  type      NotificationType
+  title     String
+  message   String
+  metadata  Json?
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  userId    String?
+  user      User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, isRead, createdAt])
+  @@map("notifications")
+}
+
+model UsageAlertTracker {
+  id               String   @id @default(uuid())
+  companyId        String
+  periodStart      DateTime
+  periodEnd        DateTime
+  threshold80Sent  Boolean  @default(false)
+  threshold90Sent  Boolean  @default(false)
+  threshold100Sent Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([companyId, periodStart])
+  @@map("usage_alert_trackers")
 }

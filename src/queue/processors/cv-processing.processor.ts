@@ -4,8 +4,10 @@ import type { Job } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AiService } from '../../ai/ai.service';
 import { FileProcessingService } from '../../file-processing/file-processing.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 import { QUEUE_NAMES } from '../queue.constants';
 import type { CvProcessingJobData } from '../queue.service';
+import { NotificationType } from '@prisma/client';
 
 @Processor(QUEUE_NAMES.CV_PROCESSING)
 export class CvProcessingProcessor {
@@ -15,6 +17,7 @@ export class CvProcessingProcessor {
     private prisma: PrismaService,
     private aiService: AiService,
     private fileProcessingService: FileProcessingService,
+    private notificationsService: NotificationsService,
   ) {}
 
   @Process('process-cv')
@@ -162,8 +165,28 @@ export class CvProcessingProcessor {
   }
 
   @OnQueueCompleted()
-  onCompleted(job: Job<CvProcessingJobData>) {
+  async onCompleted(job: Job<CvProcessingJobData>) {
     this.logger.log(`Completed job ${job.id} for candidate ${job.data.candidateId}`);
+
+    // Get candidate to find companyId and name
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id: job.data.candidateId },
+      select: { companyId: true, fullName: true },
+    });
+
+    if (candidate) {
+      // Create notification for CV processing completion
+      await this.notificationsService.createNotification({
+        type: NotificationType.CV_PROCESSING_COMPLETE,
+        companyId: candidate.companyId,
+        title: 'CV Processed',
+        message: `CV for ${candidate.fullName || 'candidate'} has been processed and scored.`,
+        metadata: { candidateId: job.data.candidateId, jobId: job.data.jobId },
+      });
+
+      // Check usage limits and send notifications if thresholds crossed
+      await this.notificationsService.checkAndNotifyUsageLimits(candidate.companyId);
+    }
   }
 
   @OnQueueFailed()

@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { UsageType, SubscriptionStatus } from '@prisma/client';
 
 export interface UsageStats {
@@ -40,6 +41,7 @@ export class BillingService {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
+    private notificationsService: NotificationsService,
   ) {
     const stripeSecretKey = this.configService.get<string>('STRIPE_SECRET_KEY');
     if (stripeSecretKey) {
@@ -573,6 +575,11 @@ export class BillingService {
         periodEnd,
       },
     });
+
+    // Check usage limits and send notifications for CV_PROCESSED type
+    if (type === 'CV_PROCESSED') {
+      await this.notificationsService.checkAndNotifyUsageLimits(companyId);
+    }
   }
 
   /**

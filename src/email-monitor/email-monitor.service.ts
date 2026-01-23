@@ -10,10 +10,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { IntegrationsService } from '../integrations/integrations.service';
 import { AiService } from '../ai/ai.service';
 import { FileProcessingService } from '../file-processing/file-processing.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { EmailPrefilterService, EmailData } from './email-prefilter.service';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import { NotificationType } from '@prisma/client';
 
 export interface GmailMessage {
   id: string;
@@ -62,6 +64,7 @@ export class EmailMonitorService {
     private aiService: AiService,
     private fileProcessingService: FileProcessingService,
     private emailPrefilterService: EmailPrefilterService,
+    private notificationsService: NotificationsService,
   ) {
     const clientId = this.configService.get<string>('google.clientId');
     const clientSecret = this.configService.get<string>('google.clientSecret');
@@ -157,6 +160,21 @@ export class EmailMonitorService {
         await this.prisma.emailConnection.update({
           where: { id: connectionId },
           data: { lastSyncAt: new Date() },
+        });
+      }
+
+      // Send notification if candidates were imported
+      if (result.emailsImported > 0) {
+        await this.notificationsService.createNotification({
+          type: NotificationType.EMAIL_IMPORT_COMPLETE,
+          companyId: connection.companyId,
+          title: 'Email Import Complete',
+          message: `${result.emailsImported} new candidate(s) imported from ${connection.email}.`,
+          metadata: {
+            connectionId: connection.id,
+            email: connection.email,
+            count: result.emailsImported,
+          },
         });
       }
 
