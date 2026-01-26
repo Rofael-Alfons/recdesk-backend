@@ -268,11 +268,12 @@ Extract and return a JSON object with this structure:
       "proficiency": string or null
     }
   ],
-  "summary": string or null (a brief AI-generated summary of the candidate)
+  "summary": string (REQUIRED - a brief 2-3 sentence professional summary highlighting the candidate's key strengths, experience level, and main skills. Always provide this field.)
 }
 
 Be thorough in extracting skills - include technical skills, tools, frameworks, and soft skills.
 For experience, list most recent first. Mark "current": true for current positions.
+The summary field is REQUIRED - always generate a professional summary even if the CV content is minimal.
 Only respond with valid JSON, no additional text.`;
 
     try {

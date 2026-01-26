@@ -3,12 +3,14 @@ import { MulterModule } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { UploadController } from './upload.controller';
 import { UploadService } from './upload.service';
+import { BillingModule } from '../billing/billing.module';
 
 @Module({
   imports: [
     MulterModule.register({
       storage: memoryStorage(),
     }),
+    BillingModule,
   ],
   controllers: [UploadController],
   providers: [UploadService],

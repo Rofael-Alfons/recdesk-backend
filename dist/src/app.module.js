@@ -26,6 +26,9 @@ const upload_module_1 = require("./upload/upload.module");
 const queue_module_1 = require("./queue/queue.module");
 const email_monitor_module_1 = require("./email-monitor/email-monitor.module");
 const billing_module_1 = require("./billing/billing.module");
+const email_templates_module_1 = require("./email-templates/email-templates.module");
+const email_sending_module_1 = require("./email-sending/email-sending.module");
+const notifications_module_1 = require("./notifications/notifications.module");
 const jwt_auth_guard_1 = require("./common/guards/jwt-auth.guard");
 const roles_guard_1 = require("./common/guards/roles.guard");
 const configuration_1 = __importDefault(require("./config/configuration"));
@@ -54,6 +57,9 @@ exports.AppModule = AppModule = __decorate([
             upload_module_1.UploadModule,
             email_monitor_module_1.EmailMonitorModule,
             billing_module_1.BillingModule,
+            email_templates_module_1.EmailTemplatesModule,
+            email_sending_module_1.EmailSendingModule,
+            notifications_module_1.NotificationsModule,
             ...(isRedisConfigured() ? [queue_module_1.QueueModule] : []),
         ],
         providers: [

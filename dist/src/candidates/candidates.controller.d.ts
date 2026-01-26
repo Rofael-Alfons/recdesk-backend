@@ -1,5 +1,5 @@
 import { CandidatesService } from './candidates.service';
-import { CreateCandidateDto, UpdateCandidateDto, QueryCandidatesDto, BulkUpdateStatusDto, BulkAddTagsDto, BulkAssignJobDto } from './dto';
+import { CreateCandidateDto, UpdateCandidateDto, QueryCandidatesDto, BulkUpdateStatusDto, BulkAddTagsDto, BulkAssignJobDto, RescoreCandidateDto } from './dto';
 import type { CurrentUserData } from '../common/decorators/current-user.decorator';
 export declare class CandidatesController {
     private candidatesService;
@@ -23,6 +23,12 @@ export declare class CandidatesController {
         job: any;
         createdAt: any;
         updatedAt: any;
+        education: any;
+        experience: any;
+        skills: any;
+        projects: any;
+        certifications: any;
+        languages: any;
     }>;
     findAll(query: QueryCandidatesDto, user: CurrentUserData): Promise<{
         data: {
@@ -44,6 +50,12 @@ export declare class CandidatesController {
             job: any;
             createdAt: any;
             updatedAt: any;
+            education: any;
+            experience: any;
+            skills: any;
+            projects: any;
+            certifications: any;
+            languages: any;
         }[];
         pagination: {
             page: number;
@@ -79,8 +91,9 @@ export declare class CandidatesController {
             };
         } & {
             id: string;
-            jobId: string;
             overallScore: number;
+            jobId: string;
+            scoredAt: Date;
             skillsMatchScore: number | null;
             experienceScore: number | null;
             educationScore: number | null;
@@ -89,7 +102,6 @@ export declare class CandidatesController {
             scoreExplanation: import("@prisma/client/runtime/library").JsonValue | null;
             recommendation: string | null;
             algorithmVersion: string;
-            scoredAt: Date;
             candidateId: string;
         })[];
         notes: ({
@@ -102,23 +114,23 @@ export declare class CandidatesController {
             id: string;
             createdAt: Date;
             updatedAt: Date;
-            candidateId: string;
             content: string;
+            candidateId: string;
             userId: string;
         })[];
         stageHistory: ({
             stage: {
                 id: string;
                 name: string;
+                jobId: string;
+                isDefault: boolean;
                 orderIndex: number;
                 color: string;
-                isDefault: boolean;
-                jobId: string;
             };
         } & {
             id: string;
-            candidateId: string;
             movedAt: Date;
+            candidateId: string;
             stageId: string;
         })[];
         id: any;
@@ -139,6 +151,12 @@ export declare class CandidatesController {
         job: any;
         createdAt: any;
         updatedAt: any;
+        education: any;
+        experience: any;
+        skills: any;
+        projects: any;
+        certifications: any;
+        languages: any;
     }>;
     update(id: string, dto: UpdateCandidateDto, user: CurrentUserData): Promise<{
         id: any;
@@ -159,6 +177,12 @@ export declare class CandidatesController {
         job: any;
         createdAt: any;
         updatedAt: any;
+        education: any;
+        experience: any;
+        skills: any;
+        projects: any;
+        certifications: any;
+        languages: any;
     }>;
     remove(id: string, user: CurrentUserData): Promise<{
         message: string;
@@ -173,8 +197,21 @@ export declare class CandidatesController {
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        candidateId: string;
         content: string;
+        candidateId: string;
         userId: string;
+    }>;
+    rescoreForJob(id: string, dto: RescoreCandidateDto, user: CurrentUserData): Promise<{
+        message: string;
+        candidateId: string;
+        jobId: string;
+        jobTitle: string;
+        score?: undefined;
+    } | {
+        message: string;
+        candidateId: string;
+        jobId: string;
+        jobTitle: string;
+        score: number;
     }>;
 }

@@ -103,7 +103,6 @@ let ScoringProcessor = ScoringProcessor_1 = class ScoringProcessor {
                     data: {
                         overallScore: scoreResult.overallScore,
                         scoreBreakdown: scoreResult.scoreExplanation || undefined,
-                        aiSummary: scoreResult.recommendation,
                     },
                 });
             }

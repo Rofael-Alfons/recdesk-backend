@@ -20,6 +20,7 @@ const upload_service_1 = require("./upload.service");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
 const roles_decorator_1 = require("../common/decorators/roles.decorator");
 const client_1 = require("@prisma/client");
+const subscription_guard_1 = require("../billing/guards/subscription.guard");
 let UploadController = class UploadController {
     uploadService;
     constructor(uploadService) {
@@ -33,6 +34,8 @@ exports.UploadController = UploadController;
 __decorate([
     (0, common_1.Post)('cvs'),
     (0, roles_decorator_1.Roles)(client_1.UserRole.ADMIN, client_1.UserRole.RECRUITER),
+    (0, common_1.UseGuards)(subscription_guard_1.SubscriptionGuard),
+    (0, subscription_guard_1.UsageCheck)(client_1.UsageType.CV_PROCESSED),
     (0, common_1.UseInterceptors)((0, platform_express_1.FilesInterceptor)('files', 200, {
         limits: {
             fileSize: 10 * 1024 * 1024,

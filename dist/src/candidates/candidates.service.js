@@ -8,14 +8,25 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var CandidatesService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CandidatesService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
-let CandidatesService = class CandidatesService {
+const queue_service_1 = require("../queue/queue.service");
+const ai_service_1 = require("../ai/ai.service");
+let CandidatesService = CandidatesService_1 = class CandidatesService {
     prisma;
-    constructor(prisma) {
+    aiService;
+    queueService;
+    logger = new common_1.Logger(CandidatesService_1.name);
+    constructor(prisma, aiService, queueService) {
         this.prisma = prisma;
+        this.aiService = aiService;
+        this.queueService = queueService;
     }
     async create(dto, companyId) {
         if (dto.email) {
@@ -346,6 +357,109 @@ let CandidatesService = class CandidatesService {
         });
         return note;
     }
+    async rescoreForJob(candidateId, dto, companyId) {
+        const candidate = await this.prisma.candidate.findFirst({
+            where: { id: candidateId, companyId },
+        });
+        if (!candidate) {
+            throw new common_1.NotFoundException('Candidate not found');
+        }
+        const job = await this.prisma.job.findFirst({
+            where: { id: dto.jobId, companyId },
+        });
+        if (!job) {
+            throw new common_1.BadRequestException('Job not found');
+        }
+        if (job.status === 'CLOSED' || job.status === 'DRAFT') {
+            throw new common_1.BadRequestException(`Cannot score against a ${job.status.toLowerCase()} job`);
+        }
+        if (this.queueService) {
+            await this.queueService.addScoringJob({
+                candidateId,
+                jobId: dto.jobId,
+            });
+            return {
+                message: 'Scoring job queued successfully',
+                candidateId,
+                jobId: dto.jobId,
+                jobTitle: job.title,
+            };
+        }
+        this.logger.log(`Scoring candidate ${candidateId} for job ${dto.jobId} synchronously`);
+        const parsedData = {
+            personalInfo: {
+                fullName: candidate.fullName,
+                email: candidate.email,
+                phone: candidate.phone,
+                location: candidate.location,
+                linkedinUrl: candidate.linkedinUrl,
+                githubUrl: candidate.githubUrl,
+                portfolioUrl: candidate.portfolioUrl,
+            },
+            education: candidate.education || [],
+            experience: candidate.experience || [],
+            skills: candidate.skills || [],
+            projects: candidate.projects || [],
+            certifications: candidate.certifications || [],
+            languages: candidate.languages || [],
+            summary: null,
+        };
+        const requirements = {
+            title: job.title,
+            requiredSkills: job.requiredSkills,
+            preferredSkills: job.preferredSkills,
+            experienceLevel: job.experienceLevel,
+            requirements: job.requirements || {},
+        };
+        const scoreResult = await this.aiService.scoreCandidate(parsedData, requirements);
+        await this.prisma.candidateScore.upsert({
+            where: {
+                candidateId_jobId: {
+                    candidateId,
+                    jobId: dto.jobId,
+                },
+            },
+            update: {
+                overallScore: scoreResult.overallScore,
+                skillsMatchScore: scoreResult.skillsMatchScore,
+                experienceScore: scoreResult.experienceScore,
+                educationScore: scoreResult.educationScore,
+                growthScore: scoreResult.growthScore,
+                bonusScore: scoreResult.bonusScore,
+                scoreExplanation: scoreResult.scoreExplanation || undefined,
+                recommendation: scoreResult.recommendation,
+                scoredAt: new Date(),
+            },
+            create: {
+                candidateId,
+                jobId: dto.jobId,
+                overallScore: scoreResult.overallScore,
+                skillsMatchScore: scoreResult.skillsMatchScore,
+                experienceScore: scoreResult.experienceScore,
+                educationScore: scoreResult.educationScore,
+                growthScore: scoreResult.growthScore,
+                bonusScore: scoreResult.bonusScore,
+                scoreExplanation: scoreResult.scoreExplanation || undefined,
+                recommendation: scoreResult.recommendation,
+            },
+        });
+        if (candidate.jobId === dto.jobId) {
+            await this.prisma.candidate.update({
+                where: { id: candidateId },
+                data: {
+                    overallScore: scoreResult.overallScore,
+                    scoreBreakdown: scoreResult.scoreExplanation || undefined,
+                },
+            });
+        }
+        return {
+            message: 'Candidate scored successfully',
+            candidateId,
+            jobId: dto.jobId,
+            jobTitle: job.title,
+            score: scoreResult.overallScore,
+        };
+    }
     formatCandidateResponse(candidate) {
         return {
             id: candidate.id,
@@ -366,12 +480,21 @@ let CandidatesService = class CandidatesService {
             job: candidate.job,
             createdAt: candidate.createdAt,
             updatedAt: candidate.updatedAt,
+            education: candidate.education,
+            experience: candidate.experience,
+            skills: candidate.skills,
+            projects: candidate.projects,
+            certifications: candidate.certifications,
+            languages: candidate.languages,
         };
     }
 };
 exports.CandidatesService = CandidatesService;
-exports.CandidatesService = CandidatesService = __decorate([
+exports.CandidatesService = CandidatesService = CandidatesService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
+    __param(2, (0, common_1.Optional)()),
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService,
+        ai_service_1.AiService,
+        queue_service_1.QueueService])
 ], CandidatesService);
 //# sourceMappingURL=candidates.service.js.map

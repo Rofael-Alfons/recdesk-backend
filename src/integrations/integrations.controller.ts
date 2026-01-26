@@ -81,7 +81,7 @@ export class IntegrationsController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
   @ApiOperation({ summary: 'Update email connection settings' })
   @ApiResponse({ status: 200, description: 'Connection updated' })
   @ApiResponse({ status: 404, description: 'Connection not found' })
@@ -94,7 +94,7 @@ export class IntegrationsController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
   @ApiOperation({ summary: 'Disconnect email integration' })
   @ApiResponse({ status: 200, description: 'Email disconnected' })
   @ApiResponse({ status: 404, description: 'Connection not found' })

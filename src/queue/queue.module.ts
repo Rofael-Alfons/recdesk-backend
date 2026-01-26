@@ -8,6 +8,7 @@ import { QueueService } from './queue.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AiModule } from '../ai/ai.module';
 import { FileProcessingModule } from '../file-processing/file-processing.module';
+import { BillingModule } from '../billing/billing.module';
 import { QUEUE_NAMES } from './queue.constants';
 
 @Module({
@@ -40,6 +41,7 @@ import { QUEUE_NAMES } from './queue.constants';
     PrismaModule,
     AiModule,
     FileProcessingModule,
+    BillingModule,
   ],
   providers: [
     QueueService,

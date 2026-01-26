@@ -32,16 +32,22 @@ let EmailMonitorScheduler = EmailMonitorScheduler_1 = class EmailMonitorSchedule
         this.isRunning = true;
         this.logger.log('Starting scheduled email polling...');
         try {
+            const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
             const connections = await this.prisma.emailConnection.findMany({
                 where: {
                     isActive: true,
                     autoImport: true,
+                    company: {
+                        lastActivityAt: {
+                            gte: oneHourAgo,
+                        },
+                    },
                 },
                 include: {
                     company: true,
                 },
             });
-            this.logger.log(`Found ${connections.length} active email connections to poll`);
+            this.logger.log(`Found ${connections.length} active email connections (from active companies) to poll`);
             for (const connection of connections) {
                 try {
                     await this.emailMonitorService.pollEmailsForConnection(connection.id);

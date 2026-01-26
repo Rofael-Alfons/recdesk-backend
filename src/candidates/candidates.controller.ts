@@ -8,6 +8,9 @@ import {
   Param,
   Query,
   ParseUUIDPipe,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -23,20 +26,24 @@ import {
   BulkUpdateStatusDto,
   BulkAddTagsDto,
   BulkAssignJobDto,
+  RescoreCandidateDto,
 } from './dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserData } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
+import { UserRole, UsageType } from '@prisma/client';
+import { SubscriptionGuard, UsageCheck } from '../billing/guards/subscription.guard';
 
 @ApiTags('Candidates')
 @ApiBearerAuth()
 @Controller('candidates')
 export class CandidatesController {
-  constructor(private candidatesService: CandidatesService) {}
+  constructor(private candidatesService: CandidatesService) { }
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @UseGuards(SubscriptionGuard)
+  @UsageCheck(UsageType.CV_PROCESSED)
   @ApiOperation({ summary: 'Create a new candidate' })
   @ApiResponse({ status: 201, description: 'Candidate created successfully' })
   async create(
@@ -141,5 +148,25 @@ export class CandidatesController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.candidatesService.addNote(id, content, user.companyId, user.id);
+  }
+
+  @Post(':id/rescore')
+  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @UseGuards(SubscriptionGuard)
+  @UsageCheck(UsageType.AI_SCORING_CALL)
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({ summary: 'Rescore candidate for a different job' })
+  @ApiResponse({
+    status: 202,
+    description: 'Scoring job queued successfully',
+  })
+  @ApiResponse({ status: 400, description: 'Invalid job or job status' })
+  @ApiResponse({ status: 404, description: 'Candidate not found' })
+  async rescoreForJob(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RescoreCandidateDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.candidatesService.rescoreForJob(id, dto, user.companyId);
   }
 }

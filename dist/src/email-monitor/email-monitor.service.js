@@ -51,10 +51,13 @@ const prisma_service_1 = require("../prisma/prisma.service");
 const integrations_service_1 = require("../integrations/integrations.service");
 const ai_service_1 = require("../ai/ai.service");
 const file_processing_service_1 = require("../file-processing/file-processing.service");
+const notifications_service_1 = require("../notifications/notifications.service");
+const billing_service_1 = require("../billing/billing.service");
 const email_prefilter_service_1 = require("./email-prefilter.service");
 const uuid_1 = require("uuid");
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs/promises"));
+const client_1 = require("@prisma/client");
 const AUTO_IMPORT_CONFIDENCE_THRESHOLD = 80;
 const CV_MIME_TYPES = [
     'application/pdf',
@@ -68,16 +71,20 @@ let EmailMonitorService = EmailMonitorService_1 = class EmailMonitorService {
     aiService;
     fileProcessingService;
     emailPrefilterService;
+    notificationsService;
+    billingService;
     logger = new common_1.Logger(EmailMonitorService_1.name);
     oauth2Client;
     uploadDir;
-    constructor(prisma, configService, integrationsService, aiService, fileProcessingService, emailPrefilterService) {
+    constructor(prisma, configService, integrationsService, aiService, fileProcessingService, emailPrefilterService, notificationsService, billingService) {
         this.prisma = prisma;
         this.configService = configService;
         this.integrationsService = integrationsService;
         this.aiService = aiService;
         this.fileProcessingService = fileProcessingService;
         this.emailPrefilterService = emailPrefilterService;
+        this.notificationsService = notificationsService;
+        this.billingService = billingService;
         const clientId = this.configService.get('google.clientId');
         const clientSecret = this.configService.get('google.clientSecret');
         const redirectUri = this.configService.get('google.redirectUri');
@@ -149,6 +156,19 @@ let EmailMonitorService = EmailMonitorService_1 = class EmailMonitorService {
                 await this.prisma.emailConnection.update({
                     where: { id: connectionId },
                     data: { lastSyncAt: new Date() },
+                });
+            }
+            if (result.emailsImported > 0) {
+                await this.notificationsService.createNotification({
+                    type: client_1.NotificationType.EMAIL_IMPORT_COMPLETE,
+                    companyId: connection.companyId,
+                    title: 'Email Import Complete',
+                    message: `${result.emailsImported} new candidate(s) imported from ${connection.email}.`,
+                    metadata: {
+                        connectionId: connection.id,
+                        email: connection.email,
+                        count: result.emailsImported,
+                    },
                 });
             }
             return result;
@@ -273,8 +293,6 @@ let EmailMonitorService = EmailMonitorService_1 = class EmailMonitorService {
                     receivedAt: new Date(parseInt(message.internalDate)),
                     isJobApplication: false,
                     confidence: 0,
-                    bodyText,
-                    bodyHtml,
                     status: 'SKIPPED',
                     skipReason: prefilterResult.reason,
                     processedAt: new Date(),
@@ -299,6 +317,7 @@ let EmailMonitorService = EmailMonitorService_1 = class EmailMonitorService {
                 confidence: aiClassification.confidence,
                 detectedPosition: aiClassification.detectedPosition,
             };
+            await this.billingService.trackUsage(connection.companyId, client_1.UsageType.AI_PARSING_CALL);
         }
         const emailImport = await this.prisma.emailImport.create({
             data: {
@@ -342,6 +361,7 @@ let EmailMonitorService = EmailMonitorService_1 = class EmailMonitorService {
                         processedAt: new Date(),
                     },
                 });
+                await this.billingService.trackUsage(connection.companyId, client_1.UsageType.EMAIL_IMPORTED);
                 return { imported: true };
             }
             catch (error) {
@@ -450,6 +470,7 @@ let EmailMonitorService = EmailMonitorService_1 = class EmailMonitorService {
         try {
             parsedData = await this.aiService.parseCV(extraction.text, attachment.filename);
             aiSummary = parsedData.summary || null;
+            await this.billingService.trackUsage(companyId, client_1.UsageType.AI_PARSING_CALL);
         }
         catch (error) {
             this.logger.error('AI parsing error:', error);
@@ -595,6 +616,7 @@ let EmailMonitorService = EmailMonitorService_1 = class EmailMonitorService {
                 experienceLevel: job.experienceLevel,
                 requirements: job.requirements || {},
             });
+            await this.billingService.trackUsage(candidate.companyId, client_1.UsageType.AI_SCORING_CALL);
             await this.prisma.candidateScore.create({
                 data: {
                     candidateId,
@@ -745,6 +767,8 @@ exports.EmailMonitorService = EmailMonitorService = EmailMonitorService_1 = __de
         integrations_service_1.IntegrationsService,
         ai_service_1.AiService,
         file_processing_service_1.FileProcessingService,
-        email_prefilter_service_1.EmailPrefilterService])
+        email_prefilter_service_1.EmailPrefilterService,
+        notifications_service_1.NotificationsService,
+        billing_service_1.BillingService])
 ], EmailMonitorService);
 //# sourceMappingURL=email-monitor.service.js.map

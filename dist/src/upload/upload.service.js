@@ -48,6 +48,8 @@ const config_1 = require("@nestjs/config");
 const prisma_service_1 = require("../prisma/prisma.service");
 const file_processing_service_1 = require("../file-processing/file-processing.service");
 const ai_service_1 = require("../ai/ai.service");
+const billing_service_1 = require("../billing/billing.service");
+const client_1 = require("@prisma/client");
 const uuid_1 = require("uuid");
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs/promises"));
@@ -56,12 +58,14 @@ let UploadService = class UploadService {
     fileProcessingService;
     aiService;
     configService;
+    billingService;
     uploadDir;
-    constructor(prisma, fileProcessingService, aiService, configService) {
+    constructor(prisma, fileProcessingService, aiService, configService, billingService) {
         this.prisma = prisma;
         this.fileProcessingService = fileProcessingService;
         this.aiService = aiService;
         this.configService = configService;
+        this.billingService = billingService;
         this.uploadDir = path.join(process.cwd(), 'uploads', 'cvs');
         this.ensureUploadDir();
     }
@@ -137,6 +141,7 @@ let UploadService = class UploadService {
             try {
                 parsedData = await this.aiService.parseCV(extraction.text, fileName);
                 aiSummary = parsedData.summary || null;
+                await this.billingService.trackUsage(companyId, client_1.UsageType.AI_PARSING_CALL);
             }
             catch (error) {
                 console.error('AI parsing error:', error);
@@ -183,8 +188,9 @@ let UploadService = class UploadService {
                     jobId,
                 },
             });
+            await this.billingService.trackUsage(companyId, client_1.UsageType.CV_PROCESSED);
             if (jobId) {
-                await this.scoreCandidate(candidate.id, jobId);
+                await this.scoreCandidate(candidate.id, jobId, companyId);
             }
             return {
                 fileName,
@@ -201,7 +207,7 @@ let UploadService = class UploadService {
             };
         }
     }
-    async scoreCandidate(candidateId, jobId) {
+    async scoreCandidate(candidateId, jobId, companyId) {
         try {
             const candidate = await this.prisma.candidate.findUnique({
                 where: { id: candidateId },
@@ -236,6 +242,7 @@ let UploadService = class UploadService {
                 experienceLevel: job.experienceLevel,
                 requirements: job.requirements || {},
             });
+            await this.billingService.trackUsage(companyId, client_1.UsageType.AI_SCORING_CALL);
             await this.prisma.candidateScore.create({
                 data: {
                     candidateId,
@@ -302,6 +309,7 @@ exports.UploadService = UploadService = __decorate([
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         file_processing_service_1.FileProcessingService,
         ai_service_1.AiService,
-        config_1.ConfigService])
+        config_1.ConfigService,
+        billing_service_1.BillingService])
 ], UploadService);
 //# sourceMappingURL=upload.service.js.map

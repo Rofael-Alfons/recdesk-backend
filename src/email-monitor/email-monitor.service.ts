@@ -11,11 +11,12 @@ import { IntegrationsService } from '../integrations/integrations.service';
 import { AiService } from '../ai/ai.service';
 import { FileProcessingService } from '../file-processing/file-processing.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { BillingService } from '../billing/billing.service';
 import { EmailPrefilterService, EmailData } from './email-prefilter.service';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { NotificationType } from '@prisma/client';
+import { NotificationType, UsageType } from '@prisma/client';
 
 export interface GmailMessage {
   id: string;
@@ -65,6 +66,7 @@ export class EmailMonitorService {
     private fileProcessingService: FileProcessingService,
     private emailPrefilterService: EmailPrefilterService,
     private notificationsService: NotificationsService,
+    private billingService: BillingService,
   ) {
     const clientId = this.configService.get<string>('google.clientId');
     const clientSecret = this.configService.get<string>('google.clientSecret');
@@ -336,7 +338,8 @@ export class EmailMonitorService {
 
     // Handle prefilter result
     if (prefilterResult.action === 'skip') {
-      // Create email import record with PREFILTER_SKIPPED status
+      // Create email import record with SKIPPED status
+      // Note: bodyText/bodyHtml intentionally omitted to save storage (~95% reduction)
       await this.prisma.emailImport.create({
         data: {
           messageId: message.id,
@@ -346,8 +349,6 @@ export class EmailMonitorService {
           receivedAt: new Date(parseInt(message.internalDate)),
           isJobApplication: false,
           confidence: 0,
-          bodyText,
-          bodyHtml,
           status: 'SKIPPED',
           skipReason: prefilterResult.reason,
           processedAt: new Date(),
@@ -387,6 +388,9 @@ export class EmailMonitorService {
         confidence: aiClassification.confidence,
         detectedPosition: aiClassification.detectedPosition,
       };
+      
+      // Track AI classification call (counts as AI_PARSING_CALL)
+      await this.billingService.trackUsage(connection.companyId, UsageType.AI_PARSING_CALL);
     }
 
     // Create email import record
@@ -459,6 +463,9 @@ export class EmailMonitorService {
             processedAt: new Date(),
           },
         });
+
+        // Track email imported usage
+        await this.billingService.trackUsage(connection.companyId, UsageType.EMAIL_IMPORTED);
 
         return { imported: true };
       } catch (error) {
@@ -632,6 +639,9 @@ export class EmailMonitorService {
     try {
       parsedData = await this.aiService.parseCV(extraction.text, attachment.filename);
       aiSummary = parsedData.summary || null;
+      
+      // Track AI parsing usage
+      await this.billingService.trackUsage(companyId, UsageType.AI_PARSING_CALL);
     } catch (error) {
       this.logger.error('AI parsing error:', error);
       parsedData = this.extractBasicDataFromFilename(attachment.filename);
@@ -815,6 +825,9 @@ export class EmailMonitorService {
         experienceLevel: job.experienceLevel,
         requirements: (job.requirements as Record<string, any>) || {},
       });
+
+      // Track AI scoring usage
+      await this.billingService.trackUsage(candidate.companyId, UsageType.AI_SCORING_CALL);
 
       // Save score
       await this.prisma.candidateScore.create({

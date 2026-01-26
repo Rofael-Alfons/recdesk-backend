@@ -1,9 +1,14 @@
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateCandidateDto, UpdateCandidateDto, QueryCandidatesDto, BulkUpdateStatusDto, BulkAddTagsDto, BulkAssignJobDto } from './dto';
+import { CreateCandidateDto, UpdateCandidateDto, QueryCandidatesDto, BulkUpdateStatusDto, BulkAddTagsDto, BulkAssignJobDto, RescoreCandidateDto } from './dto';
 import { Prisma } from '@prisma/client';
+import { QueueService } from '../queue/queue.service';
+import { AiService } from '../ai/ai.service';
 export declare class CandidatesService {
     private prisma;
-    constructor(prisma: PrismaService);
+    private aiService;
+    private queueService?;
+    private readonly logger;
+    constructor(prisma: PrismaService, aiService: AiService, queueService?: QueueService | undefined);
     create(dto: CreateCandidateDto, companyId: string): Promise<{
         id: any;
         fullName: any;
@@ -23,6 +28,12 @@ export declare class CandidatesService {
         job: any;
         createdAt: any;
         updatedAt: any;
+        education: any;
+        experience: any;
+        skills: any;
+        projects: any;
+        certifications: any;
+        languages: any;
     }>;
     findAll(companyId: string, query: QueryCandidatesDto): Promise<{
         data: {
@@ -44,6 +55,12 @@ export declare class CandidatesService {
             job: any;
             createdAt: any;
             updatedAt: any;
+            education: any;
+            experience: any;
+            skills: any;
+            projects: any;
+            certifications: any;
+            languages: any;
         }[];
         pagination: {
             page: number;
@@ -120,6 +137,12 @@ export declare class CandidatesService {
         job: any;
         createdAt: any;
         updatedAt: any;
+        education: any;
+        experience: any;
+        skills: any;
+        projects: any;
+        certifications: any;
+        languages: any;
     }>;
     update(candidateId: string, dto: UpdateCandidateDto, companyId: string): Promise<{
         id: any;
@@ -140,6 +163,12 @@ export declare class CandidatesService {
         job: any;
         createdAt: any;
         updatedAt: any;
+        education: any;
+        experience: any;
+        skills: any;
+        projects: any;
+        certifications: any;
+        languages: any;
     }>;
     remove(candidateId: string, companyId: string): Promise<{
         message: string;
@@ -176,6 +205,19 @@ export declare class CandidatesService {
         candidateId: string;
         content: string;
         userId: string;
+    }>;
+    rescoreForJob(candidateId: string, dto: RescoreCandidateDto, companyId: string): Promise<{
+        message: string;
+        candidateId: string;
+        jobId: string;
+        jobTitle: string;
+        score?: undefined;
+    } | {
+        message: string;
+        candidateId: string;
+        jobId: string;
+        jobTitle: string;
+        score: number;
     }>;
     private formatCandidateResponse;
 }

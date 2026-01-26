@@ -5,6 +5,7 @@ import {
   UploadedFiles,
   Query,
   ParseUUIDPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import {
@@ -19,7 +20,8 @@ import { UploadService } from './upload.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserData } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
+import { UserRole, UsageType } from '@prisma/client';
+import { SubscriptionGuard, UsageCheck } from '../billing/guards/subscription.guard';
 
 @ApiTags('Upload')
 @ApiBearerAuth()
@@ -29,6 +31,8 @@ export class UploadController {
 
   @Post('cvs')
   @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @UseGuards(SubscriptionGuard)
+  @UsageCheck(UsageType.CV_PROCESSED)
   @UseInterceptors(
     FilesInterceptor('files', 200, {
       limits: {

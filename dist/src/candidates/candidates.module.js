@@ -10,11 +10,23 @@ exports.CandidatesModule = void 0;
 const common_1 = require("@nestjs/common");
 const candidates_controller_1 = require("./candidates.controller");
 const candidates_service_1 = require("./candidates.service");
+const ai_module_1 = require("../ai/ai.module");
+const billing_module_1 = require("../billing/billing.module");
+const isRedisConfigured = () => {
+    return !!process.env.REDIS_HOST || process.env.NODE_ENV === 'production';
+};
 let CandidatesModule = class CandidatesModule {
 };
 exports.CandidatesModule = CandidatesModule;
 exports.CandidatesModule = CandidatesModule = __decorate([
     (0, common_1.Module)({
+        imports: [
+            ai_module_1.AiModule,
+            billing_module_1.BillingModule,
+            ...(isRedisConfigured()
+                ? [require('../queue/queue.module').QueueModule]
+                : []),
+        ],
         controllers: [candidates_controller_1.CandidatesController],
         providers: [candidates_service_1.CandidatesService],
         exports: [candidates_service_1.CandidatesService],

@@ -26,7 +26,7 @@ export declare class BillingController {
         cancelAtPeriodEnd: boolean;
         trialEndsAt: Date | null;
     } | {
-        status: "none";
+        status: string;
         message: string;
     }>;
     createCheckout(user: AuthUser, dto: CreateCheckoutDto): Promise<{
@@ -39,9 +39,9 @@ export declare class BillingController {
     getUsage(user: AuthUser): Promise<import("./billing.service").UsageStats>;
     getInvoices(user: AuthUser): Promise<{
         id: string;
-        createdAt: Date;
         companyId: string;
         status: import("@prisma/client").$Enums.InvoiceStatus;
+        createdAt: Date;
         stripeInvoiceId: string;
         amountDue: number;
         amountPaid: number;

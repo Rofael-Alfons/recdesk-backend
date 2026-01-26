@@ -14,7 +14,9 @@ export class EmailMonitorScheduler {
   ) {}
 
   /**
-   * Poll all active email connections every 5 minutes
+   * Poll email connections every 5 minutes
+   * Only polls companies that have had user activity in the last hour
+   * to avoid wasting API calls on inactive companies
    */
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleEmailPolling() {
@@ -27,18 +29,27 @@ export class EmailMonitorScheduler {
     this.logger.log('Starting scheduled email polling...');
 
     try {
-      // Get all active email connections with auto-import enabled
+      // Only poll companies that have had user activity in the last hour
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+
       const connections = await this.prisma.emailConnection.findMany({
         where: {
           isActive: true,
           autoImport: true,
+          company: {
+            lastActivityAt: {
+              gte: oneHourAgo,
+            },
+          },
         },
         include: {
           company: true,
         },
       });
 
-      this.logger.log(`Found ${connections.length} active email connections to poll`);
+      this.logger.log(
+        `Found ${connections.length} active email connections (from active companies) to poll`,
+      );
 
       // Process each connection
       for (const connection of connections) {

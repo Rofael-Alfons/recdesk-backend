@@ -18,4 +18,5 @@ __exportStar(require("./create-candidate.dto"), exports);
 __exportStar(require("./update-candidate.dto"), exports);
 __exportStar(require("./query-candidates.dto"), exports);
 __exportStar(require("./bulk-action.dto"), exports);
+__exportStar(require("./rescore-candidate.dto"), exports);
 //# sourceMappingURL=index.js.map

@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { FileProcessingService } from '../file-processing/file-processing.service';
 import { AiService } from '../ai/ai.service';
+import { BillingService } from '../billing/billing.service';
+import { UsageType } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import * as fs from 'fs/promises';
@@ -30,6 +32,7 @@ export class UploadService {
     private fileProcessingService: FileProcessingService,
     private aiService: AiService,
     private configService: ConfigService,
+    private billingService: BillingService,
   ) {
     // For local development, store files in a local directory
     // In production, this would be replaced with S3
@@ -141,6 +144,8 @@ export class UploadService {
       try {
         parsedData = await this.aiService.parseCV(extraction.text, fileName);
         aiSummary = parsedData.summary || null;
+        // Track AI parsing usage
+        await this.billingService.trackUsage(companyId, UsageType.AI_PARSING_CALL);
       } catch (error) {
         console.error('AI parsing error:', error);
         // Continue with basic data extraction from filename
@@ -193,9 +198,12 @@ export class UploadService {
         },
       });
 
+      // Track CV processed usage
+      await this.billingService.trackUsage(companyId, UsageType.CV_PROCESSED);
+
       // If job is assigned, calculate score
       if (jobId) {
-        await this.scoreCandidate(candidate.id, jobId);
+        await this.scoreCandidate(candidate.id, jobId, companyId);
       }
 
       return {
@@ -213,7 +221,7 @@ export class UploadService {
     }
   }
 
-  private async scoreCandidate(candidateId: string, jobId: string) {
+  private async scoreCandidate(candidateId: string, jobId: string, companyId: string) {
     try {
       const candidate = await this.prisma.candidate.findUnique({
         where: { id: candidateId },
@@ -251,6 +259,9 @@ export class UploadService {
         experienceLevel: job.experienceLevel,
         requirements: job.requirements as Record<string, any> || {},
       });
+
+      // Track AI scoring usage
+      await this.billingService.trackUsage(companyId, UsageType.AI_SCORING_CALL);
 
       // Save score
       await this.prisma.candidateScore.create({

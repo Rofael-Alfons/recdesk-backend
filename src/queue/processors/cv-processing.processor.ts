@@ -5,9 +5,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AiService } from '../../ai/ai.service';
 import { FileProcessingService } from '../../file-processing/file-processing.service';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { BillingService } from '../../billing/billing.service';
 import { QUEUE_NAMES } from '../queue.constants';
 import type { CvProcessingJobData } from '../queue.service';
-import { NotificationType } from '@prisma/client';
+import { NotificationType, UsageType } from '@prisma/client';
 
 @Processor(QUEUE_NAMES.CV_PROCESSING)
 export class CvProcessingProcessor {
@@ -18,7 +19,8 @@ export class CvProcessingProcessor {
     private aiService: AiService,
     private fileProcessingService: FileProcessingService,
     private notificationsService: NotificationsService,
-  ) {}
+    private billingService: BillingService,
+  ) { }
 
   @Process('process-cv')
   async processCv(job: Job<CvProcessingJobData>) {
@@ -41,13 +43,13 @@ export class CvProcessingProcessor {
       let cvText = candidate.cvText;
       if (!cvText && candidate.cvFileUrl) {
         this.logger.log(`Extracting text from CV: ${candidate.cvFileName}`);
-        
+
         const extractionResult = await this.fileProcessingService.extractTextFromFile(
           candidate.cvFileUrl,
         );
-        
+
         cvText = extractionResult.text;
-        
+
         await this.prisma.candidate.update({
           where: { id: candidateId },
           data: {
@@ -61,6 +63,9 @@ export class CvProcessingProcessor {
       if (cvText) {
         this.logger.log(`Parsing CV with AI for candidate ${candidateId}`);
         const parsed = await this.aiService.parseCV(cvText, candidate.cvFileName || null);
+        
+        // Track AI parsing usage
+        await this.billingService.trackUsage(candidate.companyId, UsageType.AI_PARSING_CALL);
 
         await this.prisma.candidate.update({
           where: { id: candidateId },
@@ -77,6 +82,7 @@ export class CvProcessingProcessor {
             projects: parsed.projects || undefined,
             certifications: parsed.certifications || undefined,
             languages: parsed.languages || undefined,
+            aiSummary: parsed.summary || undefined,
           },
         });
 
@@ -84,7 +90,7 @@ export class CvProcessingProcessor {
         const targetJobId = jobId || candidate.jobId;
         if (targetJobId) {
           this.logger.log(`Scoring candidate ${candidateId} for job ${targetJobId}`);
-          await this.scoreCandidate(candidateId, targetJobId, parsed);
+          await this.scoreCandidate(candidateId, targetJobId, parsed, candidate.companyId);
         }
       }
 
@@ -95,7 +101,7 @@ export class CvProcessingProcessor {
     }
   }
 
-  private async scoreCandidate(candidateId: string, jobId: string, parsedData: any) {
+  private async scoreCandidate(candidateId: string, jobId: string, parsedData: any, companyId: string) {
     const job = await this.prisma.job.findUnique({
       where: { id: jobId },
     });
@@ -114,6 +120,9 @@ export class CvProcessingProcessor {
     };
 
     const scoreResult = await this.aiService.scoreCandidate(parsedData, requirements);
+    
+    // Track AI scoring usage
+    await this.billingService.trackUsage(companyId, UsageType.AI_SCORING_CALL);
 
     // Upsert the score
     await this.prisma.candidateScore.upsert({
@@ -148,13 +157,12 @@ export class CvProcessingProcessor {
       },
     });
 
-    // Update overall score on candidate
+    // Update overall score on candidate (aiSummary is set during initial parsing, not overwritten here)
     await this.prisma.candidate.update({
       where: { id: candidateId },
       data: {
         overallScore: scoreResult.overallScore,
         scoreBreakdown: scoreResult.scoreExplanation || undefined,
-        aiSummary: scoreResult.recommendation,
       },
     });
   }
@@ -175,6 +183,9 @@ export class CvProcessingProcessor {
     });
 
     if (candidate) {
+      // Track CV processed usage
+      await this.billingService.trackUsage(candidate.companyId, UsageType.CV_PROCESSED);
+      
       // Create notification for CV processing completion
       await this.notificationsService.createNotification({
         type: NotificationType.CV_PROCESSING_COMPLETE,

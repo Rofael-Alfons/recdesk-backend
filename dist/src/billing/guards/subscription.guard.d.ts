@@ -4,6 +4,8 @@ import { BillingService } from '../billing.service';
 import { UsageType } from '@prisma/client';
 export declare const USAGE_TYPE_KEY = "usageType";
 export declare const UsageCheck: (type: UsageType) => (target: any, key: string, descriptor: PropertyDescriptor) => PropertyDescriptor;
+export declare const SKIP_STATUS_CHECK_KEY = "skipStatusCheck";
+export declare const SkipSubscriptionStatusCheck: () => (target: any, key: string, descriptor: PropertyDescriptor) => PropertyDescriptor;
 export declare class SubscriptionGuard implements CanActivate {
     private reflector;
     private billingService;

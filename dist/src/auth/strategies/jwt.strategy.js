@@ -39,6 +39,17 @@ let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(pas
         if (!user || !user.isActive) {
             throw new common_1.UnauthorizedException('User not found or inactive');
         }
+        const now = new Date();
+        const lastActivity = user.company.lastActivityAt;
+        const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
+        if (!lastActivity || lastActivity < oneMinuteAgo) {
+            this.prisma.company
+                .update({
+                where: { id: user.companyId },
+                data: { lastActivityAt: now },
+            })
+                .catch(() => { });
+        }
         return {
             id: user.id,
             email: user.email,

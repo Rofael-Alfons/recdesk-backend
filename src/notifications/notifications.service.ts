@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Subject, Observable, filter, map } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotificationType } from '@prisma/client';
+import { NotificationType, Prisma } from '@prisma/client';
 import {
   NotificationEvent,
   CreateNotificationData,
@@ -30,7 +30,7 @@ export class NotificationsService {
         type: data.type,
         title: data.title,
         message: data.message,
-        metadata: data.metadata || undefined,
+        metadata: (data.metadata as Prisma.InputJsonValue) || undefined,
         companyId: data.companyId,
         userId: data.userId,
       },
@@ -250,5 +250,77 @@ export class NotificationsService {
         data: { threshold80Sent: true },
       });
     }
+  }
+
+  /**
+   * Notify company that their trial is expiring soon
+   */
+  async notifyTrialExpiring(companyId: string, daysLeft: number): Promise<void> {
+    const notificationType = daysLeft <= 1 
+      ? NotificationType.TRIAL_EXPIRING_TOMORROW 
+      : NotificationType.TRIAL_EXPIRING_SOON;
+
+    const title = daysLeft <= 1 
+      ? 'Trial Expires Tomorrow!' 
+      : `Trial Expires in ${daysLeft} Days`;
+
+    const message = daysLeft <= 1
+      ? 'Your free trial expires tomorrow. Upgrade now to continue using RecDesk without interruption.'
+      : `Your free trial expires in ${daysLeft} days. Upgrade to a paid plan to keep all your data and continue using RecDesk.`;
+
+    await this.createNotification({
+      type: notificationType,
+      companyId,
+      title,
+      message,
+      metadata: { daysLeft },
+    });
+
+    this.logger.log(`Sent trial expiring notification to company ${companyId} (${daysLeft} days left)`);
+  }
+
+  /**
+   * Notify company that their trial has expired
+   */
+  async notifyTrialExpired(companyId: string): Promise<void> {
+    await this.createNotification({
+      type: NotificationType.TRIAL_EXPIRED,
+      companyId,
+      title: 'Free Trial Expired',
+      message: 'Your free trial has ended. Upgrade to a paid plan to continue using RecDesk and access your data.',
+      metadata: { expiredAt: new Date().toISOString() },
+    });
+
+    this.logger.log(`Sent trial expired notification to company ${companyId}`);
+  }
+
+  /**
+   * Notify company that their subscription has expired
+   */
+  async notifySubscriptionExpired(companyId: string): Promise<void> {
+    await this.createNotification({
+      type: NotificationType.SUBSCRIPTION_EXPIRED,
+      companyId,
+      title: 'Subscription Expired',
+      message: 'Your subscription has expired. Please renew your subscription to continue using RecDesk.',
+      metadata: { expiredAt: new Date().toISOString() },
+    });
+
+    this.logger.log(`Sent subscription expired notification to company ${companyId}`);
+  }
+
+  /**
+   * Notify company that their payment has failed
+   */
+  async notifyPaymentFailed(companyId: string, gracePeriodDays: number): Promise<void> {
+    await this.createNotification({
+      type: NotificationType.PAYMENT_FAILED_WARNING,
+      companyId,
+      title: 'Payment Failed',
+      message: `We couldn't process your payment. Please update your payment method within ${gracePeriodDays} days to avoid service interruption.`,
+      metadata: { gracePeriodDays, notifiedAt: new Date().toISOString() },
+    });
+
+    this.logger.log(`Sent payment failed notification to company ${companyId}`);
   }
 }

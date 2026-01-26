@@ -29,7 +29,16 @@ let BillingController = class BillingController {
         return this.billingService.getPlans(user.companyId);
     }
     async getSubscription(user) {
-        const subscription = await this.billingService.getSubscription(user.companyId);
+        let subscription = await this.billingService.getSubscription(user.companyId);
+        if (!subscription) {
+            try {
+                await this.billingService.createTrialSubscription(user.companyId);
+                subscription = await this.billingService.getSubscription(user.companyId);
+            }
+            catch (error) {
+                return { status: 'none', message: 'No active subscription' };
+            }
+        }
         return subscription || { status: 'none', message: 'No active subscription' };
     }
     async createCheckout(user, dto) {

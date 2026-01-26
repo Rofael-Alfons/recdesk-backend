@@ -13,10 +13,16 @@ import { UsageType, SubscriptionStatus } from '@prisma/client';
 export interface UsageStats {
   cvProcessed: number;
   cvLimit: number;
+  cvUsagePercentage: number;
   aiCalls: number;
+  aiCallLimit: number;
+  aiCallUsagePercentage: number;
   emailsSent: number;
+  emailSentLimit: number;
+  emailSentUsagePercentage: number;
   emailsImported: number;
-  usagePercentage: number;
+  emailImportLimit: number;
+  emailImportUsagePercentage: number;
   periodStart: Date;
   periodEnd: Date;
 }
@@ -28,6 +34,9 @@ export interface PlanDetails {
   monthlyPrice: number;
   annualPrice: number | null;
   cvLimit: number;
+  aiCallLimit: number;
+  emailSentLimit: number;
+  emailImportLimit: number;
   userLimit: number;
   features: Record<string, boolean>;
   isCurrentPlan: boolean;
@@ -82,6 +91,9 @@ export class BillingService {
       monthlyPrice: plan.monthlyPrice,
       annualPrice: plan.annualPrice,
       cvLimit: plan.cvLimit,
+      aiCallLimit: plan.aiCallLimit,
+      emailSentLimit: plan.emailSentLimit,
+      emailImportLimit: plan.emailImportLimit,
       userLimit: plan.userLimit,
       features: plan.features as Record<string, boolean>,
       isCurrentPlan: plan.id === currentPlanId,
@@ -394,11 +406,8 @@ export class BillingService {
       return;
     }
 
-    // Update subscription status
-    await this.prisma.subscription.updateMany({
-      where: { companyId: company.id },
-      data: { status: 'PAST_DUE' },
-    });
+    // Start grace period (this updates status to PAST_DUE and sends notification)
+    await this.startGracePeriod(company.id);
 
     // Record failed invoice
     await this.prisma.invoice.upsert({
@@ -540,16 +549,31 @@ export class BillingService {
       .filter((r) => r.type === 'EMAIL_IMPORTED')
       .reduce((sum, r) => sum + r.count, 0);
 
-    const cvLimit = subscription?.plan.cvLimit || 50; // Default free trial limit
-    const usagePercentage = cvLimit > 0 ? Math.round((cvProcessed / cvLimit) * 100) : 0;
+    // Get limits from plan (with defaults for free trial)
+    const cvLimit = subscription?.plan.cvLimit ?? 50;
+    const aiCallLimit = subscription?.plan.aiCallLimit ?? -1;
+    const emailSentLimit = subscription?.plan.emailSentLimit ?? -1;
+    const emailImportLimit = subscription?.plan.emailImportLimit ?? -1;
+
+    // Calculate usage percentages (0 for unlimited limits represented by -1)
+    const calculatePercentage = (used: number, limit: number): number => {
+      if (limit <= 0) return 0; // Unlimited or invalid limit
+      return Math.round((used / limit) * 100);
+    };
 
     return {
       cvProcessed,
       cvLimit,
+      cvUsagePercentage: calculatePercentage(cvProcessed, cvLimit),
       aiCalls,
+      aiCallLimit,
+      aiCallUsagePercentage: calculatePercentage(aiCalls, aiCallLimit),
       emailsSent,
+      emailSentLimit,
+      emailSentUsagePercentage: calculatePercentage(emailsSent, emailSentLimit),
       emailsImported,
-      usagePercentage,
+      emailImportLimit,
+      emailImportUsagePercentage: calculatePercentage(emailsImported, emailImportLimit),
       periodStart,
       periodEnd,
     };
@@ -603,24 +627,60 @@ export class BillingService {
 
     const usage = await this.getUsage(companyId);
 
-    if (type === 'CV_PROCESSED') {
-      const limit = subscription.plan.cvLimit;
+    // Helper function to check limits
+    const checkUsageLimit = (
+      current: number,
+      limit: number,
+      resourceName: string,
+    ): { allowed: boolean; current: number; limit: number; message?: string } => {
       if (limit === -1) {
         // Unlimited
-        return { allowed: true, current: usage.cvProcessed, limit: -1 };
+        return { allowed: true, current, limit: -1 };
       }
-      if (usage.cvProcessed >= limit) {
+      if (current >= limit) {
         return {
           allowed: false,
-          current: usage.cvProcessed,
+          current,
           limit,
-          message: `You have reached your CV processing limit of ${limit} CVs this month. Please upgrade your plan.`,
+          message: `You have reached your ${resourceName} limit of ${limit} this month. Please upgrade your plan.`,
         };
       }
-      return { allowed: true, current: usage.cvProcessed, limit };
-    }
+      return { allowed: true, current, limit };
+    };
 
-    return { allowed: true, current: 0, limit: -1 };
+    switch (type) {
+      case 'CV_PROCESSED':
+        return checkUsageLimit(
+          usage.cvProcessed,
+          subscription.plan.cvLimit,
+          'CV processing',
+        );
+
+      case 'AI_PARSING_CALL':
+      case 'AI_SCORING_CALL':
+        return checkUsageLimit(
+          usage.aiCalls,
+          subscription.plan.aiCallLimit,
+          'AI call',
+        );
+
+      case 'EMAIL_SENT':
+        return checkUsageLimit(
+          usage.emailsSent,
+          subscription.plan.emailSentLimit,
+          'email sending',
+        );
+
+      case 'EMAIL_IMPORTED':
+        return checkUsageLimit(
+          usage.emailsImported,
+          subscription.plan.emailImportLimit,
+          'email import',
+        );
+
+      default:
+        return { allowed: true, current: 0, limit: -1 };
+    }
   }
 
   /**
@@ -651,6 +711,9 @@ export class BillingService {
           name: 'Free Trial',
           monthlyPrice: 0,
           cvLimit: 50,
+          aiCallLimit: 100,
+          emailSentLimit: 50,
+          emailImportLimit: 100,
           userLimit: 3,
           features: {
             emailIntegration: true,
@@ -692,6 +755,9 @@ export class BillingService {
         name: 'Free Trial',
         monthlyPrice: 0,
         cvLimit: 50,
+        aiCallLimit: 100,
+        emailSentLimit: 50,
+        emailImportLimit: 100,
         userLimit: 3,
         features: {
           emailIntegration: true,
@@ -710,6 +776,9 @@ export class BillingService {
         monthlyPrice: 4900, // $49
         annualPrice: 47000, // $470 (2 months free)
         cvLimit: 500,
+        aiCallLimit: 1000,
+        emailSentLimit: 500,
+        emailImportLimit: 1000,
         userLimit: 3,
         features: {
           emailIntegration: true,
@@ -729,6 +798,9 @@ export class BillingService {
         monthlyPrice: 9900, // $99
         annualPrice: 95000, // $950 (2 months free)
         cvLimit: 2000,
+        aiCallLimit: 5000,
+        emailSentLimit: 2000,
+        emailImportLimit: 5000,
         userLimit: 10,
         features: {
           emailIntegration: true,
@@ -749,6 +821,9 @@ export class BillingService {
         monthlyPrice: 29900, // $299
         annualPrice: 287000, // $2870 (2 months free)
         cvLimit: -1, // Unlimited
+        aiCallLimit: -1, // Unlimited
+        emailSentLimit: -1, // Unlimited
+        emailImportLimit: -1, // Unlimited
         userLimit: -1, // Unlimited
         features: {
           emailIntegration: true,
@@ -791,5 +866,245 @@ export class BillingService {
     }
 
     this.logger.log('Subscription plans seeded');
+  }
+
+  // ============================================
+  // SUBSCRIPTION EXPIRATION & GRACE PERIOD
+  // ============================================
+
+  /**
+   * Grace period duration in days
+   */
+  private readonly GRACE_PERIOD_DAYS = 7;
+
+  /**
+   * Check and expire subscriptions that have passed their period end
+   * Called by the billing scheduler daily
+   */
+  async checkAndExpireSubscriptions(): Promise<{
+    expired: number;
+    notified: number;
+  }> {
+    const now = new Date();
+    let expired = 0;
+    let notified = 0;
+
+    // Find active subscriptions that have passed their period end
+    const expiredSubscriptions = await this.prisma.subscription.findMany({
+      where: {
+        status: 'ACTIVE',
+        currentPeriodEnd: { lt: now },
+      },
+      include: { company: true },
+    });
+
+    for (const subscription of expiredSubscriptions) {
+      // Update status to EXPIRED
+      await this.prisma.subscription.update({
+        where: { id: subscription.id },
+        data: { status: 'EXPIRED' },
+      });
+
+      // Send notification
+      await this.notificationsService.notifySubscriptionExpired(subscription.companyId);
+
+      expired++;
+      notified++;
+      this.logger.log(`Expired subscription for company ${subscription.companyId}`);
+    }
+
+    // Also handle expired trials
+    const expiredTrials = await this.prisma.subscription.findMany({
+      where: {
+        status: 'TRIALING',
+        trialEndsAt: { lt: now },
+      },
+    });
+
+    for (const subscription of expiredTrials) {
+      await this.prisma.subscription.update({
+        where: { id: subscription.id },
+        data: { status: 'EXPIRED' },
+      });
+
+      await this.notificationsService.notifyTrialExpired(subscription.companyId);
+
+      expired++;
+      notified++;
+      this.logger.log(`Expired trial for company ${subscription.companyId}`);
+    }
+
+    this.logger.log(`Expiration check complete: ${expired} expired, ${notified} notified`);
+    return { expired, notified };
+  }
+
+  /**
+   * Send trial expiration warnings
+   * Called by the billing scheduler daily
+   */
+  async sendTrialWarnings(): Promise<{ notified: number }> {
+    const now = new Date();
+    let notified = 0;
+
+    // Find trials ending in 3 days
+    const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const fourDaysFromNow = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000);
+
+    const trialsEndingIn3Days = await this.prisma.subscription.findMany({
+      where: {
+        status: 'TRIALING',
+        trialEndsAt: {
+          gte: threeDaysFromNow,
+          lt: fourDaysFromNow,
+        },
+      },
+    });
+
+    for (const subscription of trialsEndingIn3Days) {
+      await this.notificationsService.notifyTrialExpiring(subscription.companyId, 3);
+      notified++;
+    }
+
+    // Find trials ending in 1 day
+    const oneDayFromNow = new Date(now.getTime() + 1 * 24 * 60 * 60 * 1000);
+    const twoDaysFromNow = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
+
+    const trialsEndingIn1Day = await this.prisma.subscription.findMany({
+      where: {
+        status: 'TRIALING',
+        trialEndsAt: {
+          gte: oneDayFromNow,
+          lt: twoDaysFromNow,
+        },
+      },
+    });
+
+    for (const subscription of trialsEndingIn1Day) {
+      await this.notificationsService.notifyTrialExpiring(subscription.companyId, 1);
+      notified++;
+    }
+
+    this.logger.log(`Trial warning check complete: ${notified} notified`);
+    return { notified };
+  }
+
+  /**
+   * Handle grace period for failed payments
+   * Called when a payment fails (from webhook)
+   */
+  async startGracePeriod(companyId: string): Promise<void> {
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { companyId },
+    });
+
+    if (!subscription) {
+      return;
+    }
+
+    const gracePeriodEndsAt = new Date();
+    gracePeriodEndsAt.setDate(gracePeriodEndsAt.getDate() + this.GRACE_PERIOD_DAYS);
+
+    await this.prisma.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        status: 'PAST_DUE',
+        gracePeriodEndsAt,
+      },
+    });
+
+    await this.notificationsService.notifyPaymentFailed(companyId, this.GRACE_PERIOD_DAYS);
+
+    this.logger.log(`Started grace period for company ${companyId}, ends at ${gracePeriodEndsAt}`);
+  }
+
+  /**
+   * Check and handle expired grace periods
+   * Called by the billing scheduler daily
+   */
+  async checkGracePeriods(): Promise<{ expired: number }> {
+    const now = new Date();
+    let expired = 0;
+
+    // Find subscriptions with expired grace periods
+    const expiredGracePeriods = await this.prisma.subscription.findMany({
+      where: {
+        status: 'PAST_DUE',
+        gracePeriodEndsAt: { lt: now },
+      },
+    });
+
+    for (const subscription of expiredGracePeriods) {
+      // Update status to UNPAID (access should be restricted)
+      await this.prisma.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          status: 'UNPAID',
+          gracePeriodEndsAt: null, // Clear grace period
+        },
+      });
+
+      expired++;
+      this.logger.log(`Grace period expired for company ${subscription.companyId}`);
+    }
+
+    this.logger.log(`Grace period check complete: ${expired} expired`);
+    return { expired };
+  }
+
+  /**
+   * Check if a subscription is active (considering status, expiration, and grace period)
+   */
+  async isSubscriptionActive(companyId: string): Promise<{
+    active: boolean;
+    reason?: string;
+    daysUntilExpiration?: number;
+  }> {
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { companyId },
+      include: { plan: true },
+    });
+
+    if (!subscription) {
+      return { active: false, reason: 'No subscription found' };
+    }
+
+    const now = new Date();
+
+    // Check status
+    const inactiveStatuses: SubscriptionStatus[] = ['CANCELED', 'UNPAID', 'INCOMPLETE_EXPIRED', 'EXPIRED'];
+    if (inactiveStatuses.includes(subscription.status)) {
+      return { active: false, reason: `Subscription is ${subscription.status.toLowerCase()}` };
+    }
+
+    // Check if trial expired
+    if (subscription.status === 'TRIALING' && subscription.trialEndsAt) {
+      if (new Date(subscription.trialEndsAt) < now) {
+        return { active: false, reason: 'Trial has expired' };
+      }
+      const daysUntilExpiration = Math.ceil(
+        (new Date(subscription.trialEndsAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+      );
+      return { active: true, daysUntilExpiration };
+    }
+
+    // Check if subscription period has ended
+    if (new Date(subscription.currentPeriodEnd) < now) {
+      // Check if in grace period
+      if (subscription.status === 'PAST_DUE' && subscription.gracePeriodEndsAt) {
+        if (new Date(subscription.gracePeriodEndsAt) > now) {
+          const daysUntilExpiration = Math.ceil(
+            (new Date(subscription.gracePeriodEndsAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          return { active: true, reason: 'In grace period', daysUntilExpiration };
+        }
+      }
+      return { active: false, reason: 'Subscription period has ended' };
+    }
+
+    const daysUntilExpiration = Math.ceil(
+      (new Date(subscription.currentPeriodEnd).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    return { active: true, daysUntilExpiration };
   }
 }

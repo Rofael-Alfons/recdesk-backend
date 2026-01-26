@@ -1,13 +1,20 @@
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { UsageType } from '@prisma/client';
 export interface UsageStats {
     cvProcessed: number;
     cvLimit: number;
+    cvUsagePercentage: number;
     aiCalls: number;
+    aiCallLimit: number;
+    aiCallUsagePercentage: number;
     emailsSent: number;
+    emailSentLimit: number;
+    emailSentUsagePercentage: number;
     emailsImported: number;
-    usagePercentage: number;
+    emailImportLimit: number;
+    emailImportUsagePercentage: number;
     periodStart: Date;
     periodEnd: Date;
 }
@@ -18,6 +25,9 @@ export interface PlanDetails {
     monthlyPrice: number;
     annualPrice: number | null;
     cvLimit: number;
+    aiCallLimit: number;
+    emailSentLimit: number;
+    emailImportLimit: number;
     userLimit: number;
     features: Record<string, boolean>;
     isCurrentPlan: boolean;
@@ -25,9 +35,10 @@ export interface PlanDetails {
 export declare class BillingService {
     private prisma;
     private configService;
+    private notificationsService;
     private readonly logger;
     private stripe;
-    constructor(prisma: PrismaService, configService: ConfigService);
+    constructor(prisma: PrismaService, configService: ConfigService, notificationsService: NotificationsService);
     private ensureStripe;
     getPlans(companyId?: string): Promise<PlanDetails[]>;
     getSubscription(companyId: string): Promise<{
@@ -69,9 +80,9 @@ export declare class BillingService {
     }>;
     getInvoices(companyId: string): Promise<{
         id: string;
-        createdAt: Date;
         companyId: string;
         status: import("@prisma/client").$Enums.InvoiceStatus;
+        createdAt: Date;
         stripeInvoiceId: string;
         amountDue: number;
         amountPaid: number;
@@ -84,4 +95,21 @@ export declare class BillingService {
     }[]>;
     createTrialSubscription(companyId: string): Promise<void>;
     seedPlans(): Promise<void>;
+    private readonly GRACE_PERIOD_DAYS;
+    checkAndExpireSubscriptions(): Promise<{
+        expired: number;
+        notified: number;
+    }>;
+    sendTrialWarnings(): Promise<{
+        notified: number;
+    }>;
+    startGracePeriod(companyId: string): Promise<void>;
+    checkGracePeriods(): Promise<{
+        expired: number;
+    }>;
+    isSubscriptionActive(companyId: string): Promise<{
+        active: boolean;
+        reason?: string;
+        daysUntilExpiration?: number;
+    }>;
 }

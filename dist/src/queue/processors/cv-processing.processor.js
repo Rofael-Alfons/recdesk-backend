@@ -16,16 +16,23 @@ const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const ai_service_1 = require("../../ai/ai.service");
 const file_processing_service_1 = require("../../file-processing/file-processing.service");
+const notifications_service_1 = require("../../notifications/notifications.service");
+const billing_service_1 = require("../../billing/billing.service");
 const queue_constants_1 = require("../queue.constants");
+const client_1 = require("@prisma/client");
 let CvProcessingProcessor = CvProcessingProcessor_1 = class CvProcessingProcessor {
     prisma;
     aiService;
     fileProcessingService;
+    notificationsService;
+    billingService;
     logger = new common_1.Logger(CvProcessingProcessor_1.name);
-    constructor(prisma, aiService, fileProcessingService) {
+    constructor(prisma, aiService, fileProcessingService, notificationsService, billingService) {
         this.prisma = prisma;
         this.aiService = aiService;
         this.fileProcessingService = fileProcessingService;
+        this.notificationsService = notificationsService;
+        this.billingService = billingService;
     }
     async processCv(job) {
         const { candidateId, jobId } = job.data;
@@ -54,6 +61,7 @@ let CvProcessingProcessor = CvProcessingProcessor_1 = class CvProcessingProcesso
             if (cvText) {
                 this.logger.log(`Parsing CV with AI for candidate ${candidateId}`);
                 const parsed = await this.aiService.parseCV(cvText, candidate.cvFileName || null);
+                await this.billingService.trackUsage(candidate.companyId, client_1.UsageType.AI_PARSING_CALL);
                 await this.prisma.candidate.update({
                     where: { id: candidateId },
                     data: {
@@ -69,12 +77,13 @@ let CvProcessingProcessor = CvProcessingProcessor_1 = class CvProcessingProcesso
                         projects: parsed.projects || undefined,
                         certifications: parsed.certifications || undefined,
                         languages: parsed.languages || undefined,
+                        aiSummary: parsed.summary || undefined,
                     },
                 });
                 const targetJobId = jobId || candidate.jobId;
                 if (targetJobId) {
                     this.logger.log(`Scoring candidate ${candidateId} for job ${targetJobId}`);
-                    await this.scoreCandidate(candidateId, targetJobId, parsed);
+                    await this.scoreCandidate(candidateId, targetJobId, parsed, candidate.companyId);
                 }
             }
             return { success: true, candidateId };
@@ -84,7 +93,7 @@ let CvProcessingProcessor = CvProcessingProcessor_1 = class CvProcessingProcesso
             throw error;
         }
     }
-    async scoreCandidate(candidateId, jobId, parsedData) {
+    async scoreCandidate(candidateId, jobId, parsedData, companyId) {
         const job = await this.prisma.job.findUnique({
             where: { id: jobId },
         });
@@ -100,6 +109,7 @@ let CvProcessingProcessor = CvProcessingProcessor_1 = class CvProcessingProcesso
             requirements: job.requirements || {},
         };
         const scoreResult = await this.aiService.scoreCandidate(parsedData, requirements);
+        await this.billingService.trackUsage(companyId, client_1.UsageType.AI_SCORING_CALL);
         await this.prisma.candidateScore.upsert({
             where: {
                 candidateId_jobId: {
@@ -136,15 +146,29 @@ let CvProcessingProcessor = CvProcessingProcessor_1 = class CvProcessingProcesso
             data: {
                 overallScore: scoreResult.overallScore,
                 scoreBreakdown: scoreResult.scoreExplanation || undefined,
-                aiSummary: scoreResult.recommendation,
             },
         });
     }
     onActive(job) {
         this.logger.log(`Processing job ${job.id} for candidate ${job.data.candidateId}`);
     }
-    onCompleted(job) {
+    async onCompleted(job) {
         this.logger.log(`Completed job ${job.id} for candidate ${job.data.candidateId}`);
+        const candidate = await this.prisma.candidate.findUnique({
+            where: { id: job.data.candidateId },
+            select: { companyId: true, fullName: true },
+        });
+        if (candidate) {
+            await this.billingService.trackUsage(candidate.companyId, client_1.UsageType.CV_PROCESSED);
+            await this.notificationsService.createNotification({
+                type: client_1.NotificationType.CV_PROCESSING_COMPLETE,
+                companyId: candidate.companyId,
+                title: 'CV Processed',
+                message: `CV for ${candidate.fullName || 'candidate'} has been processed and scored.`,
+                metadata: { candidateId: job.data.candidateId, jobId: job.data.jobId },
+            });
+            await this.notificationsService.checkAndNotifyUsageLimits(candidate.companyId);
+        }
     }
     onFailed(job, error) {
         this.logger.error(`Failed job ${job.id} for candidate ${job.data.candidateId}: ${error.message}`);
@@ -167,7 +191,7 @@ __decorate([
     (0, bull_1.OnQueueCompleted)(),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:returntype", Promise)
 ], CvProcessingProcessor.prototype, "onCompleted", null);
 __decorate([
     (0, bull_1.OnQueueFailed)(),
@@ -179,6 +203,8 @@ exports.CvProcessingProcessor = CvProcessingProcessor = CvProcessingProcessor_1 
     (0, bull_1.Processor)(queue_constants_1.QUEUE_NAMES.CV_PROCESSING),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         ai_service_1.AiService,
-        file_processing_service_1.FileProcessingService])
+        file_processing_service_1.FileProcessingService,
+        notifications_service_1.NotificationsService,
+        billing_service_1.BillingService])
 ], CvProcessingProcessor);
 //# sourceMappingURL=cv-processing.processor.js.map

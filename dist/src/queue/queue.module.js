@@ -17,6 +17,7 @@ const queue_service_1 = require("./queue.service");
 const prisma_module_1 = require("../prisma/prisma.module");
 const ai_module_1 = require("../ai/ai.module");
 const file_processing_module_1 = require("../file-processing/file-processing.module");
+const billing_module_1 = require("../billing/billing.module");
 const queue_constants_1 = require("./queue.constants");
 let QueueModule = class QueueModule {
 };
@@ -48,6 +49,7 @@ exports.QueueModule = QueueModule = __decorate([
             prisma_module_1.PrismaModule,
             ai_module_1.AiModule,
             file_processing_module_1.FileProcessingModule,
+            billing_module_1.BillingModule,
         ],
         providers: [
             queue_service_1.QueueService,

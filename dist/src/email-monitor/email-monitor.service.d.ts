@@ -4,6 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { IntegrationsService } from '../integrations/integrations.service';
 import { AiService } from '../ai/ai.service';
 import { FileProcessingService } from '../file-processing/file-processing.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { BillingService } from '../billing/billing.service';
 import { EmailPrefilterService } from './email-prefilter.service';
 export interface GmailMessage {
     id: string;
@@ -36,10 +38,12 @@ export declare class EmailMonitorService {
     private aiService;
     private fileProcessingService;
     private emailPrefilterService;
+    private notificationsService;
+    private billingService;
     private readonly logger;
     private oauth2Client;
     private uploadDir;
-    constructor(prisma: PrismaService, configService: ConfigService, integrationsService: IntegrationsService, aiService: AiService, fileProcessingService: FileProcessingService, emailPrefilterService: EmailPrefilterService);
+    constructor(prisma: PrismaService, configService: ConfigService, integrationsService: IntegrationsService, aiService: AiService, fileProcessingService: FileProcessingService, emailPrefilterService: EmailPrefilterService, notificationsService: NotificationsService, billingService: BillingService);
     private ensureUploadDir;
     pollEmailsForConnection(connectionId: string, companyId?: string): Promise<SyncResult>;
     private fetchNewEmails;
@@ -75,8 +79,8 @@ export declare class EmailMonitorService {
         totalEmailsProcessed: number;
         recentEmails: {
             id: string;
-            createdAt: Date;
             status: import("@prisma/client").$Enums.EmailImportStatus;
+            createdAt: Date;
             subject: string | null;
             senderEmail: string;
             isJobApplication: boolean;

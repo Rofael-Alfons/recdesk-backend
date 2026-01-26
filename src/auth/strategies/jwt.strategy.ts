@@ -38,6 +38,22 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User not found or inactive');
     }
 
+    // Track company activity for smart email polling
+    // Rate-limited: only update if >1 minute since last update to avoid DB spam
+    const now = new Date();
+    const lastActivity = user.company.lastActivityAt;
+    const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
+
+    if (!lastActivity || lastActivity < oneMinuteAgo) {
+      // Fire and forget - don't await to avoid slowing down requests
+      this.prisma.company
+        .update({
+          where: { id: user.companyId },
+          data: { lastActivityAt: now },
+        })
+        .catch(() => {}); // Silently ignore errors
+    }
+
     return {
       id: user.id,
       email: user.email,

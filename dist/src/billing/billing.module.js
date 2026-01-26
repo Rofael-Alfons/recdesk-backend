@@ -8,19 +8,25 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BillingModule = void 0;
 const common_1 = require("@nestjs/common");
+const schedule_1 = require("@nestjs/schedule");
 const billing_service_1 = require("./billing.service");
 const billing_controller_1 = require("./billing.controller");
 const webhooks_controller_1 = require("./webhooks.controller");
+const billing_scheduler_1 = require("./billing.scheduler");
+const subscription_guard_1 = require("./guards/subscription.guard");
 const prisma_module_1 = require("../prisma/prisma.module");
 let BillingModule = class BillingModule {
 };
 exports.BillingModule = BillingModule;
 exports.BillingModule = BillingModule = __decorate([
     (0, common_1.Module)({
-        imports: [prisma_module_1.PrismaModule],
+        imports: [
+            prisma_module_1.PrismaModule,
+            schedule_1.ScheduleModule.forRoot(),
+        ],
         controllers: [billing_controller_1.BillingController, webhooks_controller_1.WebhooksController],
-        providers: [billing_service_1.BillingService],
-        exports: [billing_service_1.BillingService],
+        providers: [billing_service_1.BillingService, billing_scheduler_1.BillingScheduler, subscription_guard_1.SubscriptionGuard],
+        exports: [billing_service_1.BillingService, subscription_guard_1.SubscriptionGuard],
     })
 ], BillingModule);
 //# sourceMappingURL=billing.module.js.map

@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Optional,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -11,12 +13,21 @@ import {
   BulkUpdateStatusDto,
   BulkAddTagsDto,
   BulkAssignJobDto,
+  RescoreCandidateDto,
 } from './dto';
 import { Prisma } from '@prisma/client';
+import { QueueService } from '../queue/queue.service';
+import { AiService, ParsedCVData } from '../ai/ai.service';
 
 @Injectable()
 export class CandidatesService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(CandidatesService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private aiService: AiService,
+    @Optional() private queueService?: QueueService,
+  ) { }
 
   async create(dto: CreateCandidateDto, companyId: string) {
     // Check for duplicate email if provided
@@ -422,6 +433,142 @@ export class CandidatesService {
     return note;
   }
 
+  async rescoreForJob(
+    candidateId: string,
+    dto: RescoreCandidateDto,
+    companyId: string,
+  ) {
+    // Verify candidate exists and belongs to company
+    const candidate = await this.prisma.candidate.findFirst({
+      where: { id: candidateId, companyId },
+    });
+
+    if (!candidate) {
+      throw new NotFoundException('Candidate not found');
+    }
+
+    // Verify job exists and belongs to company
+    const job = await this.prisma.job.findFirst({
+      where: { id: dto.jobId, companyId },
+    });
+
+    if (!job) {
+      throw new BadRequestException('Job not found');
+    }
+
+    // Check if job is in a scoreable state (OPEN or PAUSED)
+    if (job.status === 'CLOSED' || job.status === 'DRAFT') {
+      throw new BadRequestException(
+        `Cannot score against a ${job.status.toLowerCase()} job`,
+      );
+    }
+
+    // If QueueService is available, use it; otherwise do synchronous scoring
+    if (this.queueService) {
+      await this.queueService.addScoringJob({
+        candidateId,
+        jobId: dto.jobId,
+      });
+
+      return {
+        message: 'Scoring job queued successfully',
+        candidateId,
+        jobId: dto.jobId,
+        jobTitle: job.title,
+      };
+    }
+
+    // Synchronous scoring (when Redis/Queue is not available)
+    this.logger.log(
+      `Scoring candidate ${candidateId} for job ${dto.jobId} synchronously`,
+    );
+
+    const parsedData: ParsedCVData = {
+      personalInfo: {
+        fullName: candidate.fullName,
+        email: candidate.email,
+        phone: candidate.phone,
+        location: candidate.location,
+        linkedinUrl: candidate.linkedinUrl,
+        githubUrl: candidate.githubUrl,
+        portfolioUrl: candidate.portfolioUrl,
+      },
+      education: (candidate.education as ParsedCVData['education']) || [],
+      experience: (candidate.experience as ParsedCVData['experience']) || [],
+      skills: (candidate.skills as string[]) || [],
+      projects: (candidate.projects as ParsedCVData['projects']) || [],
+      certifications:
+        (candidate.certifications as ParsedCVData['certifications']) || [],
+      languages: (candidate.languages as ParsedCVData['languages']) || [],
+      summary: null,
+    };
+
+    const requirements = {
+      title: job.title,
+      requiredSkills: job.requiredSkills,
+      preferredSkills: job.preferredSkills,
+      experienceLevel: job.experienceLevel,
+      requirements: (job.requirements as Record<string, unknown>) || {},
+    };
+
+    const scoreResult = await this.aiService.scoreCandidate(
+      parsedData,
+      requirements,
+    );
+
+    // Upsert the score
+    await this.prisma.candidateScore.upsert({
+      where: {
+        candidateId_jobId: {
+          candidateId,
+          jobId: dto.jobId,
+        },
+      },
+      update: {
+        overallScore: scoreResult.overallScore,
+        skillsMatchScore: scoreResult.skillsMatchScore,
+        experienceScore: scoreResult.experienceScore,
+        educationScore: scoreResult.educationScore,
+        growthScore: scoreResult.growthScore,
+        bonusScore: scoreResult.bonusScore,
+        scoreExplanation: scoreResult.scoreExplanation || undefined,
+        recommendation: scoreResult.recommendation,
+        scoredAt: new Date(),
+      },
+      create: {
+        candidateId,
+        jobId: dto.jobId,
+        overallScore: scoreResult.overallScore,
+        skillsMatchScore: scoreResult.skillsMatchScore,
+        experienceScore: scoreResult.experienceScore,
+        educationScore: scoreResult.educationScore,
+        growthScore: scoreResult.growthScore,
+        bonusScore: scoreResult.bonusScore,
+        scoreExplanation: scoreResult.scoreExplanation || undefined,
+        recommendation: scoreResult.recommendation,
+      },
+    });
+
+    // Update overall score on candidate if this is their assigned job
+    if (candidate.jobId === dto.jobId) {
+      await this.prisma.candidate.update({
+        where: { id: candidateId },
+        data: {
+          overallScore: scoreResult.overallScore,
+          scoreBreakdown: scoreResult.scoreExplanation || undefined,
+        },
+      });
+    }
+
+    return {
+      message: 'Candidate scored successfully',
+      candidateId,
+      jobId: dto.jobId,
+      jobTitle: job.title,
+      score: scoreResult.overallScore,
+    };
+  }
+
   private formatCandidateResponse(candidate: any) {
     return {
       id: candidate.id,
@@ -442,6 +589,13 @@ export class CandidatesService {
       job: candidate.job,
       createdAt: candidate.createdAt,
       updatedAt: candidate.updatedAt,
+      // Parsed CV data fields
+      education: candidate.education,
+      experience: candidate.experience,
+      skills: candidate.skills,
+      projects: candidate.projects,
+      certifications: candidate.certifications,
+      languages: candidate.languages,
     };
   }
 }

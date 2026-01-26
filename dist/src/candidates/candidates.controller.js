@@ -20,6 +20,7 @@ const dto_1 = require("./dto");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
 const roles_decorator_1 = require("../common/decorators/roles.decorator");
 const client_1 = require("@prisma/client");
+const subscription_guard_1 = require("../billing/guards/subscription.guard");
 let CandidatesController = class CandidatesController {
     candidatesService;
     constructor(candidatesService) {
@@ -55,11 +56,16 @@ let CandidatesController = class CandidatesController {
     async addNote(id, content, user) {
         return this.candidatesService.addNote(id, content, user.companyId, user.id);
     }
+    async rescoreForJob(id, dto, user) {
+        return this.candidatesService.rescoreForJob(id, dto, user.companyId);
+    }
 };
 exports.CandidatesController = CandidatesController;
 __decorate([
     (0, common_1.Post)(),
     (0, roles_decorator_1.Roles)(client_1.UserRole.ADMIN, client_1.UserRole.RECRUITER),
+    (0, common_1.UseGuards)(subscription_guard_1.SubscriptionGuard),
+    (0, subscription_guard_1.UsageCheck)(client_1.UsageType.CV_PROCESSED),
     (0, swagger_1.ApiOperation)({ summary: 'Create a new candidate' }),
     (0, swagger_1.ApiResponse)({ status: 201, description: 'Candidate created successfully' }),
     __param(0, (0, common_1.Body)()),
@@ -167,6 +173,26 @@ __decorate([
     __metadata("design:paramtypes", [String, String, Object]),
     __metadata("design:returntype", Promise)
 ], CandidatesController.prototype, "addNote", null);
+__decorate([
+    (0, common_1.Post)(':id/rescore'),
+    (0, roles_decorator_1.Roles)(client_1.UserRole.ADMIN, client_1.UserRole.RECRUITER),
+    (0, common_1.UseGuards)(subscription_guard_1.SubscriptionGuard),
+    (0, subscription_guard_1.UsageCheck)(client_1.UsageType.AI_SCORING_CALL),
+    (0, common_1.HttpCode)(common_1.HttpStatus.ACCEPTED),
+    (0, swagger_1.ApiOperation)({ summary: 'Rescore candidate for a different job' }),
+    (0, swagger_1.ApiResponse)({
+        status: 202,
+        description: 'Scoring job queued successfully',
+    }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid job or job status' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Candidate not found' }),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, dto_1.RescoreCandidateDto, Object]),
+    __metadata("design:returntype", Promise)
+], CandidatesController.prototype, "rescoreForJob", null);
 exports.CandidatesController = CandidatesController = __decorate([
     (0, swagger_1.ApiTags)('Candidates'),
     (0, swagger_1.ApiBearerAuth)(),

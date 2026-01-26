@@ -470,7 +470,7 @@ async function main() {
 
   console.log('📝 Created candidate notes');
 
-  // Create email templates
+  // Create email templates (scoped to company)
   await Promise.all([
     prisma.emailTemplate.create({
       data: {
@@ -486,6 +486,7 @@ Best regards,
 The {{company_name}} Hiring Team`,
         type: EmailTemplateType.CUSTOM,
         isDefault: true,
+        companyId: techCorp.id,
       },
     }),
     prisma.emailTemplate.create({
@@ -504,6 +505,7 @@ Best regards,
 The {{company_name}} Hiring Team`,
         type: EmailTemplateType.REJECTION,
         isDefault: true,
+        companyId: techCorp.id,
       },
     }),
     prisma.emailTemplate.create({
@@ -522,6 +524,7 @@ Best regards,
 The {{company_name}} Hiring Team`,
         type: EmailTemplateType.INTERVIEW_INVITE,
         isDefault: true,
+        companyId: techCorp.id,
       },
     }),
   ]);

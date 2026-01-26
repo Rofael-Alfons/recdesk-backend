@@ -13,7 +13,7 @@ export class ScoringProcessor {
   constructor(
     private prisma: PrismaService,
     private aiService: AiService,
-  ) {}
+  ) { }
 
   @Process('score-candidate')
   async scoreCandidate(job: Job<ScoringJobData>) {
@@ -105,13 +105,13 @@ export class ScoringProcessor {
       });
 
       // Update overall score on candidate if this is their assigned job
+      // Note: aiSummary is set during initial CV parsing, not overwritten here
       if (candidate.jobId === jobId) {
         await this.prisma.candidate.update({
           where: { id: candidateId },
           data: {
             overallScore: scoreResult.overallScore,
             scoreBreakdown: scoreResult.scoreExplanation || undefined,
-            aiSummary: scoreResult.recommendation,
           },
         });
       }

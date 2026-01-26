@@ -12,6 +12,7 @@ const platform_express_1 = require("@nestjs/platform-express");
 const multer_1 = require("multer");
 const upload_controller_1 = require("./upload.controller");
 const upload_service_1 = require("./upload.service");
+const billing_module_1 = require("../billing/billing.module");
 let UploadModule = class UploadModule {
 };
 exports.UploadModule = UploadModule;
@@ -21,6 +22,7 @@ exports.UploadModule = UploadModule = __decorate([
             platform_express_1.MulterModule.register({
                 storage: (0, multer_1.memoryStorage)(),
             }),
+            billing_module_1.BillingModule,
         ],
         controllers: [upload_controller_1.UploadController],
         providers: [upload_service_1.UploadService],

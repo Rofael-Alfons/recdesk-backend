@@ -13,10 +13,12 @@ const email_monitor_service_1 = require("./email-monitor.service");
 const email_monitor_scheduler_1 = require("./email-monitor.scheduler");
 const email_monitor_controller_1 = require("./email-monitor.controller");
 const email_prefilter_service_1 = require("./email-prefilter.service");
+const email_cleanup_service_1 = require("./email-cleanup.service");
 const prisma_module_1 = require("../prisma/prisma.module");
 const integrations_module_1 = require("../integrations/integrations.module");
 const ai_module_1 = require("../ai/ai.module");
 const file_processing_module_1 = require("../file-processing/file-processing.module");
+const billing_module_1 = require("../billing/billing.module");
 let EmailMonitorModule = class EmailMonitorModule {
 };
 exports.EmailMonitorModule = EmailMonitorModule;
@@ -28,9 +30,10 @@ exports.EmailMonitorModule = EmailMonitorModule = __decorate([
             integrations_module_1.IntegrationsModule,
             ai_module_1.AiModule,
             file_processing_module_1.FileProcessingModule,
+            billing_module_1.BillingModule,
         ],
         controllers: [email_monitor_controller_1.EmailMonitorController],
-        providers: [email_monitor_service_1.EmailMonitorService, email_monitor_scheduler_1.EmailMonitorScheduler, email_prefilter_service_1.EmailPrefilterService],
+        providers: [email_monitor_service_1.EmailMonitorService, email_monitor_scheduler_1.EmailMonitorScheduler, email_prefilter_service_1.EmailPrefilterService, email_cleanup_service_1.EmailCleanupService],
         exports: [email_monitor_service_1.EmailMonitorService, email_prefilter_service_1.EmailPrefilterService],
     })
 ], EmailMonitorModule);

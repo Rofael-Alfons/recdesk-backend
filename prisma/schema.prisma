@@ -21,6 +21,7 @@ model Company {
   mode             CompanyMode @default(FULL_ATS)
   plan             PlanType @default(STARTER)
   stripeCustomerId String?  @unique  // Stripe customer ID
+  lastActivityAt   DateTime?  // Track last user activity for smart email polling
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -379,6 +380,7 @@ model EmailImport {
 
   candidate Candidate?
 
+  @@index([status, createdAt])  // For efficient cleanup queries
   @@map("email_imports")
 }
 
@@ -440,18 +442,21 @@ model EmailSent {
 // ============================================
 
 model SubscriptionPlan {
-  id            String   @id @default(uuid())
-  name          String   // "Free Trial", "Starter", "Professional", "Enterprise"
-  stripePriceId String?  @unique  // Stripe price ID (null for free trial)
-  monthlyPrice  Int      // Price in cents (0 for free trial)
-  annualPrice   Int?     // Annual price in cents (with discount)
-  cvLimit       Int      // CVs per month (-1 for unlimited)
-  userLimit     Int      // Team members (-1 for unlimited)
-  features      Json     // Feature flags { emailIntegration: true, ... }
-  isActive      Boolean  @default(true)
-  sortOrder     Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id               String   @id @default(uuid())
+  name             String   // "Free Trial", "Starter", "Professional", "Enterprise"
+  stripePriceId    String?  @unique  // Stripe price ID (null for free trial)
+  monthlyPrice     Int      // Price in cents (0 for free trial)
+  annualPrice      Int?     // Annual price in cents (with discount)
+  cvLimit          Int      // CVs per month (-1 for unlimited)
+  userLimit        Int      // Team members (-1 for unlimited)
+  aiCallLimit      Int      @default(-1)  // AI calls per month (-1 for unlimited)
+  emailSentLimit   Int      @default(-1)  // Emails sent per month (-1 for unlimited)
+  emailImportLimit Int      @default(-1)  // Emails imported per month (-1 for unlimited)
+  features         Json     // Feature flags { emailIntegration: true, ... }
+  isActive         Boolean  @default(true)
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   subscriptions Subscription[]
 
@@ -466,6 +471,7 @@ model Subscription {
   currentPeriodEnd     DateTime
   cancelAtPeriodEnd    Boolean            @default(false)
   trialEndsAt          DateTime?          // For free trial tracking
+  gracePeriodEndsAt    DateTime?          // Set when payment fails, null otherwise
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
@@ -486,6 +492,7 @@ enum SubscriptionStatus {
   UNPAID
   INCOMPLETE
   INCOMPLETE_EXPIRED
+  EXPIRED  // Subscription period has ended without renewal
 }
 
 model UsageRecord {
@@ -550,6 +557,12 @@ enum NotificationType {
   USAGE_WARNING_80
   USAGE_WARNING_90
   USAGE_LIMIT_REACHED
+  // Trial and subscription notifications
+  TRIAL_EXPIRING_SOON     // 3 days before trial ends
+  TRIAL_EXPIRING_TOMORROW // 1 day before trial ends
+  TRIAL_EXPIRED           // Trial has expired
+  SUBSCRIPTION_EXPIRED    // Subscription period has ended
+  PAYMENT_FAILED_WARNING  // Payment failed, grace period started
 }
 
 model Notification {

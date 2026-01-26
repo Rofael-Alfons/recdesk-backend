@@ -94,7 +94,7 @@ __decorate([
 ], IntegrationsController.prototype, "gmailCallback", null);
 __decorate([
     (0, common_1.Patch)(':id'),
-    (0, roles_decorator_1.Roles)(client_1.UserRole.ADMIN),
+    (0, roles_decorator_1.Roles)(client_1.UserRole.ADMIN, client_1.UserRole.RECRUITER),
     (0, swagger_1.ApiOperation)({ summary: 'Update email connection settings' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Connection updated' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Connection not found' }),
@@ -107,7 +107,7 @@ __decorate([
 ], IntegrationsController.prototype, "updateConnection", null);
 __decorate([
     (0, common_1.Delete)(':id'),
-    (0, roles_decorator_1.Roles)(client_1.UserRole.ADMIN),
+    (0, roles_decorator_1.Roles)(client_1.UserRole.ADMIN, client_1.UserRole.RECRUITER),
     (0, swagger_1.ApiOperation)({ summary: 'Disconnect email integration' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Email disconnected' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Connection not found' }),
