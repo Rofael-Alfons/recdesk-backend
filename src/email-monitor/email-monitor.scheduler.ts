@@ -11,7 +11,7 @@ export class EmailMonitorScheduler {
   constructor(
     private emailMonitorService: EmailMonitorService,
     private prisma: PrismaService,
-  ) {}
+  ) { }
 
   /**
    * Poll email connections every 5 minutes

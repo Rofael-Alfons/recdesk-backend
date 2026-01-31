@@ -383,6 +383,9 @@ let EmailMonitorService = EmailMonitorService_1 = class EmailMonitorService {
                 data: {
                     status: 'SKIPPED',
                     processedAt: new Date(),
+                    skipReason: classification.isJobApplication
+                        ? `Low confidence (${classification.confidence}%)`
+                        : 'AI determined not a job application',
                 },
             });
             return { imported: false };
@@ -402,15 +405,19 @@ let EmailMonitorService = EmailMonitorService_1 = class EmailMonitorService {
         }
         let bodyText = '';
         let bodyHtml = '';
-        const extractBody = (part) => {
-            if (part.mimeType === 'text/plain' && part.body?.data) {
+        const extractBody = (part, depth = 0) => {
+            const mimeType = part.mimeType?.toLowerCase() || '';
+            this.logger.debug(`[extractBody] depth=${depth}, mimeType=${part.mimeType}, hasData=${!!part.body?.data}, partsCount=${part.parts?.length || 0}`);
+            if (mimeType.startsWith('text/plain') && part.body?.data) {
                 bodyText = Buffer.from(part.body.data, 'base64').toString('utf-8');
+                this.logger.debug(`[extractBody] Extracted text/plain body (${bodyText.length} chars)`);
             }
-            else if (part.mimeType === 'text/html' && part.body?.data) {
+            else if (mimeType.startsWith('text/html') && part.body?.data) {
                 bodyHtml = Buffer.from(part.body.data, 'base64').toString('utf-8');
+                this.logger.debug(`[extractBody] Extracted text/html body (${bodyHtml.length} chars)`);
             }
             if (part.parts) {
-                part.parts.forEach(extractBody);
+                part.parts.forEach((p) => extractBody(p, depth + 1));
             }
         };
         if (message.payload) {

@@ -91,9 +91,8 @@ export declare class CandidatesController {
             };
         } & {
             id: string;
-            overallScore: number;
             jobId: string;
-            scoredAt: Date;
+            overallScore: number;
             skillsMatchScore: number | null;
             experienceScore: number | null;
             educationScore: number | null;
@@ -102,6 +101,7 @@ export declare class CandidatesController {
             scoreExplanation: import("@prisma/client/runtime/library").JsonValue | null;
             recommendation: string | null;
             algorithmVersion: string;
+            scoredAt: Date;
             candidateId: string;
         })[];
         notes: ({
@@ -114,23 +114,23 @@ export declare class CandidatesController {
             id: string;
             createdAt: Date;
             updatedAt: Date;
-            content: string;
             candidateId: string;
+            content: string;
             userId: string;
         })[];
         stageHistory: ({
             stage: {
                 id: string;
                 name: string;
-                jobId: string;
-                isDefault: boolean;
                 orderIndex: number;
                 color: string;
+                isDefault: boolean;
+                jobId: string;
             };
         } & {
             id: string;
-            movedAt: Date;
             candidateId: string;
+            movedAt: Date;
             stageId: string;
         })[];
         id: any;
@@ -197,8 +197,8 @@ export declare class CandidatesController {
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        content: string;
         candidateId: string;
+        content: string;
         userId: string;
     }>;
     rescoreForJob(id: string, dto: RescoreCandidateDto, user: CurrentUserData): Promise<{
