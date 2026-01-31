@@ -32,7 +32,7 @@ export class IntegrationsController {
   constructor(
     private integrationsService: IntegrationsService,
     private configService: ConfigService,
-  ) {}
+  ) { }
 
   @Get()
   @ApiOperation({ summary: 'List all email connections' })

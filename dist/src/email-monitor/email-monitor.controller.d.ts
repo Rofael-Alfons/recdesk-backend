@@ -30,12 +30,12 @@ export declare class EmailMonitorController {
         totalEmailsProcessed: number;
         recentEmails: {
             id: string;
-            status: import("@prisma/client").$Enums.EmailImportStatus;
             createdAt: Date;
+            status: import("@prisma/client").$Enums.EmailImportStatus;
             subject: string | null;
-            senderEmail: string;
             isJobApplication: boolean;
             confidence: number | null;
+            senderEmail: string;
         }[];
     }>;
 }

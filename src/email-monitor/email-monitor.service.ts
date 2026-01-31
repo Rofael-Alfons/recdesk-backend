@@ -487,6 +487,9 @@ export class EmailMonitorService {
         data: {
           status: 'SKIPPED',
           processedAt: new Date(),
+          skipReason: classification.isJobApplication
+            ? `Low confidence (${classification.confidence}%)`
+            : 'AI determined not a job application',
         },
       });
       return { imported: false };
@@ -524,15 +527,29 @@ export class EmailMonitorService {
     let bodyHtml = '';
 
     // Extract body from parts
-    const extractBody = (part: gmail_v1.Schema$MessagePart) => {
-      if (part.mimeType === 'text/plain' && part.body?.data) {
+    // Note: Gmail returns MIME types with charset (e.g., "text/plain; charset=utf-8")
+    // so we use startsWith() instead of exact match
+    const extractBody = (part: gmail_v1.Schema$MessagePart, depth = 0) => {
+      const mimeType = part.mimeType?.toLowerCase() || '';
+
+      this.logger.debug(
+        `[extractBody] depth=${depth}, mimeType=${part.mimeType}, hasData=${!!part.body?.data}, partsCount=${part.parts?.length || 0}`,
+      );
+
+      if (mimeType.startsWith('text/plain') && part.body?.data) {
         bodyText = Buffer.from(part.body.data, 'base64').toString('utf-8');
-      } else if (part.mimeType === 'text/html' && part.body?.data) {
+        this.logger.debug(
+          `[extractBody] Extracted text/plain body (${bodyText.length} chars)`,
+        );
+      } else if (mimeType.startsWith('text/html') && part.body?.data) {
         bodyHtml = Buffer.from(part.body.data, 'base64').toString('utf-8');
+        this.logger.debug(
+          `[extractBody] Extracted text/html body (${bodyHtml.length} chars)`,
+        );
       }
 
       if (part.parts) {
-        part.parts.forEach(extractBody);
+        part.parts.forEach((p) => extractBody(p, depth + 1));
       }
     };
 
