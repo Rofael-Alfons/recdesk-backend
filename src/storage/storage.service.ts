@@ -28,8 +28,10 @@ export class StorageService implements OnModuleInit {
   private localUploadPath: string;
 
   constructor(private configService: ConfigService) {
-    this.region = this.configService.get<string>('aws.region') || 'eu-central-1';
-    this.bucket = this.configService.get<string>('aws.s3Bucket') || 'recdesk-cvs';
+    this.region =
+      this.configService.get<string>('aws.region') || 'eu-central-1';
+    this.bucket =
+      this.configService.get<string>('aws.s3Bucket') || 'recdesk-cvs';
     this.useLocalFallback =
       this.configService.get<string>('S3_USE_LOCAL_FALLBACK') === 'true' ||
       !this.configService.get<string>('aws.accessKeyId');
@@ -50,10 +52,14 @@ export class StorageService implements OnModuleInit {
 
   private initializeS3Client() {
     const accessKeyId = this.configService.get<string>('aws.accessKeyId');
-    const secretAccessKey = this.configService.get<string>('aws.secretAccessKey');
+    const secretAccessKey = this.configService.get<string>(
+      'aws.secretAccessKey',
+    );
 
     if (!accessKeyId || !secretAccessKey) {
-      this.logger.warn('AWS credentials not configured. Falling back to local storage.');
+      this.logger.warn(
+        'AWS credentials not configured. Falling back to local storage.',
+      );
       this.useLocalFallback = true;
       return;
     }
@@ -66,7 +72,9 @@ export class StorageService implements OnModuleInit {
       },
     });
 
-    this.logger.log(`S3 client initialized for region: ${this.region}, bucket: ${this.bucket}`);
+    this.logger.log(
+      `S3 client initialized for region: ${this.region}, bucket: ${this.bucket}`,
+    );
   }
 
   private async verifyBucketAccess(): Promise<void> {
@@ -85,7 +93,9 @@ export class StorageService implements OnModuleInit {
   private async ensureLocalDirectory(): Promise<void> {
     try {
       await fs.mkdir(this.localUploadPath, { recursive: true });
-      this.logger.log(`Local upload directory ensured: ${this.localUploadPath}`);
+      this.logger.log(
+        `Local upload directory ensured: ${this.localUploadPath}`,
+      );
     } catch (error) {
       this.logger.error('Failed to create local upload directory', error);
     }
@@ -152,7 +162,10 @@ export class StorageService implements OnModuleInit {
     }
   }
 
-  private async uploadFileLocally(buffer: Buffer, key: string): Promise<UploadResult> {
+  private async uploadFileLocally(
+    buffer: Buffer,
+    key: string,
+  ): Promise<UploadResult> {
     const filePath = path.join(process.cwd(), 'uploads', key);
     const directory = path.dirname(filePath);
 
@@ -198,7 +211,9 @@ export class StorageService implements OnModuleInit {
         Key: key,
       });
 
-      const signedUrl = await getSignedUrl(this.s3Client, command, { expiresIn });
+      const signedUrl = await getSignedUrl(this.s3Client, command, {
+        expiresIn,
+      });
       return signedUrl;
     } catch (error) {
       this.logger.error(`Failed to generate signed URL for: ${key}`, error);

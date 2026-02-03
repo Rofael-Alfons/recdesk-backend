@@ -105,7 +105,8 @@ export class UsersService {
 
     // Generate a temporary password
     const tempPassword = uuidv4().slice(0, 12);
-    const saltRounds = this.configService.get<number>('bcrypt.saltRounds') || 12;
+    const saltRounds =
+      this.configService.get<number>('bcrypt.saltRounds') || 12;
     const passwordHash = await bcrypt.hash(tempPassword, saltRounds);
 
     const user = await this.prisma.user.create({
@@ -133,7 +134,8 @@ export class UsersService {
     return {
       user,
       tempPassword, // This should only be returned in development
-      message: 'User invited successfully. They will receive an email with login instructions.',
+      message:
+        'User invited successfully. They will receive an email with login instructions.',
     };
   }
 
@@ -165,12 +167,21 @@ export class UsersService {
     }
 
     // Only admins can change roles or activate/deactivate
-    if ((dto.role || dto.isActive !== undefined) && requestingUserRole !== UserRole.ADMIN) {
-      throw new ForbiddenException('Only admins can change role or activation status');
+    if (
+      (dto.role || dto.isActive !== undefined) &&
+      requestingUserRole !== UserRole.ADMIN
+    ) {
+      throw new ForbiddenException(
+        'Only admins can change role or activation status',
+      );
     }
 
     // Prevent removing the last admin
-    if (dto.role && dto.role !== UserRole.ADMIN && targetUser.role === UserRole.ADMIN) {
+    if (
+      dto.role &&
+      dto.role !== UserRole.ADMIN &&
+      targetUser.role === UserRole.ADMIN
+    ) {
       const adminCount = await this.prisma.user.count({
         where: {
           companyId,

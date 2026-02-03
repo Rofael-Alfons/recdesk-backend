@@ -40,12 +40,17 @@ export class NotificationsController {
     // and merge with actual notifications
     const heartbeat$ = interval(30000).pipe(
       startWith(0),
-      map(() => ({ type: 'heartbeat', data: { timestamp: new Date().toISOString() } })),
+      map(() => ({
+        type: 'heartbeat',
+        data: { timestamp: new Date().toISOString() },
+      })),
     );
 
-    const notifications$ = this.notificationsService.subscribeToCompany(companyId).pipe(
-      map((notification) => ({ type: 'notification', data: notification })),
-    );
+    const notifications$ = this.notificationsService
+      .subscribeToCompany(companyId)
+      .pipe(
+        map((notification) => ({ type: 'notification', data: notification })),
+      );
 
     // Merge heartbeat and notifications
     return new Observable<MessageEvent>((subscriber) => {
@@ -77,7 +82,10 @@ export class NotificationsController {
 
   @Get()
   @ApiOperation({ summary: 'Get notification history (paginated)' })
-  async getNotifications(@Req() req: any, @Query() query: NotificationQueryDto) {
+  async getNotifications(
+    @Req() req: any,
+    @Query() query: NotificationQueryDto,
+  ) {
     const companyId = req.user?.companyId;
     return this.notificationsService.getNotifications(companyId, {
       page: query.page,

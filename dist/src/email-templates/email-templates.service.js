@@ -45,11 +45,7 @@ let EmailTemplatesService = EmailTemplatesService_1 = class EmailTemplatesServic
                 companyId,
                 ...(query.type && { type: query.type }),
             },
-            orderBy: [
-                { isDefault: 'desc' },
-                { type: 'asc' },
-                { name: 'asc' },
-            ],
+            orderBy: [{ isDefault: 'desc' }, { type: 'asc' }, { name: 'asc' }],
         });
         return templates;
     }
@@ -245,7 +241,7 @@ Best regards,
                 });
             }
             await this.prisma.emailTemplate.create({
-                data: { ...template, companyId }
+                data: { ...template, companyId },
             });
             created++;
         }
@@ -258,12 +254,24 @@ Best regards,
     }
     getAvailableTokens() {
         return [
-            { token: '{{candidate_name}}', description: 'Full name of the candidate' },
-            { token: '{{candidate_first_name}}', description: 'First name of the candidate' },
-            { token: '{{candidate_email}}', description: 'Email address of the candidate' },
+            {
+                token: '{{candidate_name}}',
+                description: 'Full name of the candidate',
+            },
+            {
+                token: '{{candidate_first_name}}',
+                description: 'First name of the candidate',
+            },
+            {
+                token: '{{candidate_email}}',
+                description: 'Email address of the candidate',
+            },
             { token: '{{job_title}}', description: 'Title of the job position' },
             { token: '{{company_name}}', description: 'Name of your company' },
-            { token: '{{sender_name}}', description: 'Full name of the person sending the email' },
+            {
+                token: '{{sender_name}}',
+                description: 'Full name of the person sending the email',
+            },
         ];
     }
 };

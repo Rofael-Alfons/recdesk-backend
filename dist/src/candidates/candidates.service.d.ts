@@ -76,13 +76,13 @@ export declare class CandidatesService {
     findOne(candidateId: string, companyId: string): Promise<{
         scores: ({
             job: {
-                id: string;
                 title: string;
+                id: string;
             };
         } & {
+            jobId: string;
             id: string;
             overallScore: number;
-            jobId: string;
             scoredAt: Date;
             skillsMatchScore: number | null;
             experienceScore: number | null;
@@ -101,18 +101,18 @@ export declare class CandidatesService {
                 lastName: string;
             };
         } & {
-            id: string;
             createdAt: Date;
+            id: string;
             updatedAt: Date;
-            userId: string;
-            content: string;
             candidateId: string;
+            content: string;
+            userId: string;
         })[];
         stageHistory: ({
             stage: {
-                id: string;
-                name: string;
                 jobId: string;
+                name: string;
+                id: string;
                 orderIndex: number;
                 color: string;
                 isDefault: boolean;
@@ -205,12 +205,12 @@ export declare class CandidatesService {
             lastName: string;
         };
     } & {
-        id: string;
         createdAt: Date;
+        id: string;
         updatedAt: Date;
-        userId: string;
-        content: string;
         candidateId: string;
+        content: string;
+        userId: string;
     }>;
     rescoreForJob(candidateId: string, dto: RescoreCandidateDto, companyId: string): Promise<{
         message: string;

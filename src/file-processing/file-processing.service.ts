@@ -51,12 +51,15 @@ export class FileProcessingService {
       return {
         text: '',
         confidence: 0,
-        error: error instanceof Error ? error.message : 'Unknown extraction error',
+        error:
+          error instanceof Error ? error.message : 'Unknown extraction error',
       };
     }
   }
 
-  private async extractFromPdf(fileBuffer: Buffer): Promise<TextExtractionResult> {
+  private async extractFromPdf(
+    fileBuffer: Buffer,
+  ): Promise<TextExtractionResult> {
     let pdfParser: PDFParse | null = null;
     try {
       // PDFParse v2.x: pass data in constructor options
@@ -88,7 +91,9 @@ export class FileProcessingService {
     }
   }
 
-  private async extractFromDocx(fileBuffer: Buffer): Promise<TextExtractionResult> {
+  private async extractFromDocx(
+    fileBuffer: Buffer,
+  ): Promise<TextExtractionResult> {
     try {
       const result = await mammoth.extractRawText({ buffer: fileBuffer });
 
@@ -150,9 +155,7 @@ export class FileProcessingService {
     return Math.min(confidence, 100);
   }
 
-  validateFile(
-    file: Express.Multer.File,
-  ): { valid: boolean; error?: string } {
+  validateFile(file: Express.Multer.File): { valid: boolean; error?: string } {
     const ext = path.extname(file.originalname).toLowerCase();
 
     if (!this.supportedExtensions.includes(ext)) {
@@ -183,7 +186,9 @@ export class FileProcessingService {
    * - S3 URLs: s3://bucket/cvs/filename.pdf
    * - S3 keys: cvs/filename.pdf
    */
-  async extractTextFromFile(filePathOrKey: string): Promise<TextExtractionResult> {
+  async extractTextFromFile(
+    filePathOrKey: string,
+  ): Promise<TextExtractionResult> {
     try {
       let fileBuffer: Buffer;
       let fileName: string;
@@ -199,12 +204,16 @@ export class FileProcessingService {
         fileName = path.basename(filePathOrKey);
       } else if (filePathOrKey.startsWith('/uploads/')) {
         // Legacy local path - try storage service first (handles both local and S3 fallback)
-        this.logger.debug(`Downloading file from local path via storage: ${filePathOrKey}`);
+        this.logger.debug(
+          `Downloading file from local path via storage: ${filePathOrKey}`,
+        );
         fileBuffer = await this.storageService.downloadFile(filePathOrKey);
         fileName = path.basename(filePathOrKey);
       } else {
         // Absolute local path - read directly from filesystem
-        this.logger.debug(`Reading file directly from filesystem: ${filePathOrKey}`);
+        this.logger.debug(
+          `Reading file directly from filesystem: ${filePathOrKey}`,
+        );
         fileBuffer = await fs.readFile(filePathOrKey);
         fileName = path.basename(filePathOrKey);
       }

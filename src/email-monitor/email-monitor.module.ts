@@ -21,7 +21,12 @@ import { BillingModule } from '../billing/billing.module';
     BillingModule,
   ],
   controllers: [EmailMonitorController],
-  providers: [EmailMonitorService, EmailMonitorScheduler, EmailPrefilterService, EmailCleanupService],
+  providers: [
+    EmailMonitorService,
+    EmailMonitorScheduler,
+    EmailPrefilterService,
+    EmailCleanupService,
+  ],
   exports: [EmailMonitorService, EmailPrefilterService],
 })
-export class EmailMonitorModule { }
+export class EmailMonitorModule {}

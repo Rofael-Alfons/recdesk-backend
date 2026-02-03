@@ -1,6 +1,6 @@
 /**
  * Email Pre-filter Rules Configuration
- * 
+ *
  * These rules are used to quickly classify emails before calling AI,
  * reducing API costs by 50-80%.
  */
@@ -104,12 +104,7 @@ export const JOB_APPLICATION_PATTERNS = {
   ],
 
   // CV attachment indicators
-  cvAttachmentPatterns: [
-    /cv/i,
-    /resume/i,
-    /curriculum/i,
-    /vitae/i,
-  ],
+  cvAttachmentPatterns: [/cv/i, /resume/i, /curriculum/i, /vitae/i],
 };
 
 // Supported CV file extensions

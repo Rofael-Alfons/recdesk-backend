@@ -52,7 +52,10 @@ __decorate([
     (0, common_1.Post)(),
     (0, roles_decorator_1.Roles)(client_1.UserRole.ADMIN, client_1.UserRole.RECRUITER),
     (0, swagger_1.ApiOperation)({ summary: 'Create a new email template' }),
-    (0, swagger_1.ApiResponse)({ status: 201, description: 'Email template created successfully' }),
+    (0, swagger_1.ApiResponse)({
+        status: 201,
+        description: 'Email template created successfully',
+    }),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),

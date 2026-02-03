@@ -59,7 +59,9 @@ __decorate([
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     (0, common_1.UseGuards)(subscription_guard_1.SubscriptionGuard),
     (0, subscription_guard_1.UsageCheck)(client_1.UsageType.EMAIL_IMPORTED),
-    (0, swagger_1.ApiOperation)({ summary: 'Manually trigger email sync for a specific connection' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Manually trigger email sync for a specific connection',
+    }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Sync completed successfully' }),
     __param(0, (0, common_1.Param)('connectionId')),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),

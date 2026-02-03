@@ -8,10 +8,7 @@ import { SubscriptionGuard } from './guards/subscription.guard';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
-  imports: [
-    PrismaModule,
-    ScheduleModule.forRoot(),
-  ],
+  imports: [PrismaModule, ScheduleModule.forRoot()],
   controllers: [BillingController, WebhooksController],
   providers: [BillingService, BillingScheduler, SubscriptionGuard],
   exports: [BillingService, SubscriptionGuard],

@@ -29,7 +29,7 @@ export class CandidatesService {
     private aiService: AiService,
     private storageService: StorageService,
     @Optional() private queueService?: QueueService,
-  ) {}
+  ) { }
 
   async create(dto: CreateCandidateDto, companyId: string) {
     // Check for duplicate email if provided

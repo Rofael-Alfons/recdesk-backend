@@ -1,4 +1,9 @@
-import { Processor, Process, OnQueueFailed, OnQueueCompleted } from '@nestjs/bull';
+import {
+  Processor,
+  Process,
+  OnQueueFailed,
+  OnQueueCompleted,
+} from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import type { Job } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -13,7 +18,7 @@ export class ScoringProcessor {
   constructor(
     private prisma: PrismaService,
     private aiService: AiService,
-  ) { }
+  ) {}
 
   @Process('score-candidate')
   async scoreCandidate(job: Job<ScoringJobData>) {
@@ -55,7 +60,8 @@ export class ScoringProcessor {
         experience: (candidate.experience as ParsedCVData['experience']) || [],
         skills: (candidate.skills as string[]) || [],
         projects: (candidate.projects as ParsedCVData['projects']) || [],
-        certifications: (candidate.certifications as ParsedCVData['certifications']) || [],
+        certifications:
+          (candidate.certifications as ParsedCVData['certifications']) || [],
         languages: (candidate.languages as ParsedCVData['languages']) || [],
         summary: null,
       };
@@ -69,7 +75,10 @@ export class ScoringProcessor {
       };
 
       // Score with AI
-      const scoreResult = await this.aiService.scoreCandidate(parsedData, requirements);
+      const scoreResult = await this.aiService.scoreCandidate(
+        parsedData,
+        requirements,
+      );
 
       // Upsert the score
       await this.prisma.candidateScore.upsert({

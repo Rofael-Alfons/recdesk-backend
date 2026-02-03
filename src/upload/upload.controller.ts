@@ -21,7 +21,10 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserData } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole, UsageType } from '@prisma/client';
-import { SubscriptionGuard, UsageCheck } from '../billing/guards/subscription.guard';
+import {
+  SubscriptionGuard,
+  UsageCheck,
+} from '../billing/guards/subscription.guard';
 
 @ApiTags('Upload')
 @ApiBearerAuth()
@@ -61,7 +64,8 @@ export class UploadController {
   @ApiResponse({ status: 400, description: 'Invalid files or parameters' })
   async uploadCVs(
     @UploadedFiles() files: Express.Multer.File[],
-    @Query('jobId', new ParseUUIDPipe({ optional: true })) jobId: string | undefined,
+    @Query('jobId', new ParseUUIDPipe({ optional: true }))
+    jobId: string | undefined,
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.uploadService.uploadBulkCVs(files, user.companyId, jobId);

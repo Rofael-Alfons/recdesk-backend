@@ -99,7 +99,10 @@ __decorate([
     (0, common_1.Post)('forgot-password'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     (0, swagger_1.ApiOperation)({ summary: 'Request password reset email' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Reset email sent if account exists' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Reset email sent if account exists',
+    }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [dto_1.ForgotPasswordDto]),

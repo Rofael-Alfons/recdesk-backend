@@ -25,6 +25,8 @@ exports.CorrelationIdMiddleware = CorrelationIdMiddleware = __decorate([
     (0, common_1.Injectable)()
 ], CorrelationIdMiddleware);
 function getCorrelationId(req) {
-    return req.correlationId || req.headers[exports.CORRELATION_ID_HEADER] || 'unknown';
+    return (req.correlationId ||
+        req.headers[exports.CORRELATION_ID_HEADER] ||
+        'unknown');
 }
 //# sourceMappingURL=correlation-id.middleware.js.map

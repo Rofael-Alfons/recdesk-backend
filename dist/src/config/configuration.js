@@ -11,11 +11,7 @@ function validateEnvironment() {
     const env = process.env.NODE_ENV;
     const isProduction = env === 'production';
     if (isProduction) {
-        const criticalVars = [
-            'DATABASE_URL',
-            'JWT_SECRET',
-            'ENCRYPTION_KEY',
-        ];
+        const criticalVars = ['DATABASE_URL', 'JWT_SECRET', 'ENCRYPTION_KEY'];
         const missing = criticalVars.filter((v) => !process.env[v]);
         if (missing.length > 0) {
             throw new Error(`Missing critical environment variables for ${env}: ${missing.join(', ')}`);
@@ -37,8 +33,7 @@ exports.default = () => ({
         url: process.env.DATABASE_URL,
     },
     jwt: {
-        secret: process.env.JWT_SECRET ||
-            'your-super-secret-key-change-in-production',
+        secret: process.env.JWT_SECRET || 'your-super-secret-key-change-in-production',
         accessExpirationSeconds: parseInt(process.env.JWT_ACCESS_EXPIRATION_SECONDS || '900', 10),
         refreshExpirationSeconds: parseInt(process.env.JWT_REFRESH_EXPIRATION_SECONDS || '604800', 10),
     },

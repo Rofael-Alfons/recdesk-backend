@@ -7,7 +7,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailTemplatesService } from '../email-templates/email-templates.service';
-import { TemplateEngineService, PersonalizationContext } from './template-engine.service';
+import {
+  TemplateEngineService,
+  PersonalizationContext,
+} from './template-engine.service';
 import { BillingService } from '../billing/billing.service';
 import { SendEmailDto, BulkSendEmailDto, PreviewEmailDto } from './dto';
 import sgMail from '@sendgrid/mail';
@@ -34,22 +37,30 @@ export class EmailSendingService {
     private billingService: BillingService,
   ) {
     const apiKey = this.configService.get<string>('sendgrid.apiKey');
-    this.fromEmail = this.configService.get<string>('sendgrid.fromEmail') || 'noreply@recdesk.io';
-    
+    this.fromEmail =
+      this.configService.get<string>('sendgrid.fromEmail') ||
+      'noreply@recdesk.io';
+
     if (apiKey) {
       sgMail.setApiKey(apiKey);
       this.isConfigured = true;
       this.logger.log('SendGrid configured successfully');
     } else {
       this.isConfigured = false;
-      this.logger.warn('SendGrid API key not configured - emails will be logged only');
+      this.logger.warn(
+        'SendGrid API key not configured - emails will be logged only',
+      );
     }
   }
 
   /**
    * Send a single email to a candidate
    */
-  async sendEmail(dto: SendEmailDto, userId: string, companyId: string): Promise<SendResult> {
+  async sendEmail(
+    dto: SendEmailDto,
+    userId: string,
+    companyId: string,
+  ): Promise<SendResult> {
     // Get candidate with job info
     const candidate = await this.prisma.candidate.findFirst({
       where: { id: dto.candidateId, companyId },
@@ -65,7 +76,10 @@ export class EmailSendingService {
     }
 
     // Get template (scoped to company)
-    const template = await this.emailTemplatesService.findOne(dto.templateId, companyId);
+    const template = await this.emailTemplatesService.findOne(
+      dto.templateId,
+      companyId,
+    );
 
     // Get company and user info
     const [company, user] = await Promise.all([
@@ -149,7 +163,10 @@ export class EmailSendingService {
     results: SendResult[];
   }> {
     // Get template (scoped to company)
-    const template = await this.emailTemplatesService.findOne(dto.templateId, companyId);
+    const template = await this.emailTemplatesService.findOne(
+      dto.templateId,
+      companyId,
+    );
 
     // Get candidates with job info
     const candidates = await this.prisma.candidate.findMany({
@@ -276,7 +293,10 @@ export class EmailSendingService {
     userId: string,
   ): Promise<{ subject: string; body: string; tokens: string[] }> {
     // Get template (scoped to company)
-    const template = await this.emailTemplatesService.findOne(dto.templateId, companyId);
+    const template = await this.emailTemplatesService.findOne(
+      dto.templateId,
+      companyId,
+    );
 
     let context: PersonalizationContext;
 
@@ -303,9 +323,9 @@ export class EmailSendingService {
         },
         job: candidate.job,
         company: { name: company?.name || 'Your Company' },
-        sender: { 
-          firstName: user?.firstName || 'Your', 
-          lastName: user?.lastName || 'Name' 
+        sender: {
+          firstName: user?.firstName || 'Your',
+          lastName: user?.lastName || 'Name',
         },
       };
     } else {
@@ -318,16 +338,18 @@ export class EmailSendingService {
       context = {
         ...this.templateEngine.createSampleContext(),
         company: { name: company?.name || 'Your Company' },
-        sender: { 
-          firstName: user?.firstName || 'Your', 
-          lastName: user?.lastName || 'Name' 
+        sender: {
+          firstName: user?.firstName || 'Your',
+          lastName: user?.lastName || 'Name',
         },
       };
     }
 
     const subject = this.templateEngine.render(template.subject, context);
     const body = this.templateEngine.render(template.body, context);
-    const tokens = this.templateEngine.extractTokens(template.subject + template.body);
+    const tokens = this.templateEngine.extractTokens(
+      template.subject + template.body,
+    );
 
     return { subject, body, tokens };
   }

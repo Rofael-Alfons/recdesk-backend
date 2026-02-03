@@ -10,4 +10,4 @@ import { PrismaModule } from '../prisma/prisma.module';
   controllers: [HealthController],
   providers: [PrismaHealthIndicator, RedisHealthIndicator],
 })
-export class HealthModule { }
+export class HealthModule {}

@@ -26,7 +26,7 @@ let EmailClassificationProcessor = EmailClassificationProcessor_1 = class EmailC
         this.aiService = aiService;
     }
     async classifyEmail(job) {
-        const { emailConnectionId, messageId, subject, senderEmail, senderName, bodyText } = job.data;
+        const { emailConnectionId, messageId, subject, senderEmail, senderName, bodyText, } = job.data;
         this.logger.log(`Classifying email ${messageId}`);
         try {
             const existingImport = await this.prisma.emailImport.findUnique({

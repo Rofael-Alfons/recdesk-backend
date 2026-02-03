@@ -42,8 +42,12 @@ export class QueueService {
   /**
    * Add a CV processing job to the queue
    */
-  async addCvProcessingJob(data: CvProcessingJobData): Promise<Job<CvProcessingJobData>> {
-    this.logger.log(`Adding CV processing job for candidate ${data.candidateId}`);
+  async addCvProcessingJob(
+    data: CvProcessingJobData,
+  ): Promise<Job<CvProcessingJobData>> {
+    this.logger.log(
+      `Adding CV processing job for candidate ${data.candidateId}`,
+    );
     return this.cvProcessingQueue.add('process-cv', data, {
       priority: 2, // Normal priority
     });
@@ -70,7 +74,9 @@ export class QueueService {
   async addEmailClassificationJob(
     data: EmailClassificationJobData,
   ): Promise<Job<EmailClassificationJobData>> {
-    this.logger.log(`Adding email classification job for message ${data.messageId}`);
+    this.logger.log(
+      `Adding email classification job for message ${data.messageId}`,
+    );
     return this.emailClassificationQueue.add('classify-email', data, {
       priority: 1, // High priority
     });
@@ -89,7 +95,9 @@ export class QueueService {
   /**
    * Add multiple scoring jobs (e.g., when job requirements change)
    */
-  async addBulkScoringJobs(jobs: ScoringJobData[]): Promise<Job<ScoringJobData>[]> {
+  async addBulkScoringJobs(
+    jobs: ScoringJobData[],
+  ): Promise<Job<ScoringJobData>[]> {
     this.logger.log(`Adding ${jobs.length} scoring jobs`);
     const jobsToAdd = jobs.map((data) => ({
       name: 'score-candidate',

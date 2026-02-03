@@ -7,11 +7,19 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { EmailMonitorService } from './email-monitor.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UsageType } from '@prisma/client';
-import { SubscriptionGuard, UsageCheck } from '../billing/guards/subscription.guard';
+import {
+  SubscriptionGuard,
+  UsageCheck,
+} from '../billing/guards/subscription.guard';
 
 interface AuthUser {
   userId: string;
@@ -43,7 +51,9 @@ export class EmailMonitorController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(SubscriptionGuard)
   @UsageCheck(UsageType.EMAIL_IMPORTED)
-  @ApiOperation({ summary: 'Manually trigger email sync for a specific connection' })
+  @ApiOperation({
+    summary: 'Manually trigger email sync for a specific connection',
+  })
   @ApiResponse({ status: 200, description: 'Sync completed successfully' })
   async triggerSyncForConnection(
     @Param('connectionId') connectionId: string,

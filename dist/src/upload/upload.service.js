@@ -153,7 +153,8 @@ let UploadService = UploadService_1 = class UploadService {
             }
             const candidate = await this.prisma.candidate.create({
                 data: {
-                    fullName: parsedData.personalInfo?.fullName || this.extractNameFromFilename(fileName),
+                    fullName: parsedData.personalInfo?.fullName ||
+                        this.extractNameFromFilename(fileName),
                     email: parsedData.personalInfo?.email?.toLowerCase(),
                     phone: parsedData.personalInfo?.phone,
                     location: parsedData.personalInfo?.location,
@@ -265,11 +266,11 @@ let UploadService = UploadService_1 = class UploadService {
             .replace(/cv|resume|curriculum|vitae/gi, '')
             .replace(/\d+/g, '')
             .trim();
-        return name
+        return (name
             .split(' ')
             .filter(Boolean)
             .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-            .join(' ') || 'Unknown Candidate';
+            .join(' ') || 'Unknown Candidate');
     }
     extractBasicDataFromFilename(fileName) {
         return {

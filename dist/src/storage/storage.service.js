@@ -61,8 +61,10 @@ let StorageService = StorageService_1 = class StorageService {
     localUploadPath;
     constructor(configService) {
         this.configService = configService;
-        this.region = this.configService.get('aws.region') || 'eu-central-1';
-        this.bucket = this.configService.get('aws.s3Bucket') || 'recdesk-cvs';
+        this.region =
+            this.configService.get('aws.region') || 'eu-central-1';
+        this.bucket =
+            this.configService.get('aws.s3Bucket') || 'recdesk-cvs';
         this.useLocalFallback =
             this.configService.get('S3_USE_LOCAL_FALLBACK') === 'true' ||
                 !this.configService.get('aws.accessKeyId');
@@ -177,7 +179,9 @@ let StorageService = StorageService_1 = class StorageService {
                 Bucket: this.bucket,
                 Key: key,
             });
-            const signedUrl = await (0, s3_request_presigner_1.getSignedUrl)(this.s3Client, command, { expiresIn });
+            const signedUrl = await (0, s3_request_presigner_1.getSignedUrl)(this.s3Client, command, {
+                expiresIn,
+            });
             return signedUrl;
         }
         catch (error) {

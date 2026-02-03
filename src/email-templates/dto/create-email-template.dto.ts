@@ -1,4 +1,11 @@
-import { IsString, IsEnum, IsBoolean, IsOptional, MinLength, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsEnum,
+  IsBoolean,
+  IsOptional,
+  MinLength,
+  MaxLength,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export enum EmailTemplateType {
@@ -10,35 +17,45 @@ export enum EmailTemplateType {
 }
 
 export class CreateEmailTemplateDto {
-  @ApiProperty({ description: 'Template name', example: 'Professional Rejection' })
+  @ApiProperty({
+    description: 'Template name',
+    example: 'Professional Rejection',
+  })
   @IsString()
   @MinLength(1)
   @MaxLength(100)
   name: string;
 
-  @ApiProperty({ description: 'Email subject line', example: 'Update on your application for {{job_title}}' })
+  @ApiProperty({
+    description: 'Email subject line',
+    example: 'Update on your application for {{job_title}}',
+  })
   @IsString()
   @MinLength(1)
   @MaxLength(200)
   subject: string;
 
-  @ApiProperty({ 
-    description: 'Email body with personalization tokens', 
-    example: 'Dear {{candidate_name}},\n\nThank you for your interest in the {{job_title}} position...' 
+  @ApiProperty({
+    description: 'Email body with personalization tokens',
+    example:
+      'Dear {{candidate_name}},\n\nThank you for your interest in the {{job_title}} position...',
   })
   @IsString()
   @MinLength(1)
   body: string;
 
-  @ApiProperty({ 
-    description: 'Template type', 
+  @ApiProperty({
+    description: 'Template type',
     enum: EmailTemplateType,
-    example: EmailTemplateType.REJECTION 
+    example: EmailTemplateType.REJECTION,
   })
   @IsEnum(EmailTemplateType)
   type: EmailTemplateType;
 
-  @ApiPropertyOptional({ description: 'Set as default template for this type', default: false })
+  @ApiPropertyOptional({
+    description: 'Set as default template for this type',
+    default: false,
+  })
   @IsBoolean()
   @IsOptional()
   isDefault?: boolean;

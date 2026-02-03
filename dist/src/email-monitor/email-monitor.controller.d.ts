@@ -29,9 +29,9 @@ export declare class EmailMonitorController {
         lastSyncAt: Date | null;
         totalEmailsProcessed: number;
         recentEmails: {
-            id: string;
-            createdAt: Date;
             status: import("@prisma/client").$Enums.EmailImportStatus;
+            createdAt: Date;
+            id: string;
             subject: string | null;
             senderEmail: string;
             isJobApplication: boolean;

@@ -24,7 +24,7 @@ interface AuthUser {
 @ApiBearerAuth()
 @Controller('billing')
 export class BillingController {
-  constructor(private billingService: BillingService) {}
+  constructor(private billingService: BillingService) { }
 
   @Get('plans')
   @ApiOperation({ summary: 'Get available subscription plans' })
@@ -38,7 +38,7 @@ export class BillingController {
   @ApiResponse({ status: 200, description: 'Returns current subscription details' })
   async getSubscription(@CurrentUser() user: AuthUser) {
     let subscription = await this.billingService.getSubscription(user.companyId);
-    
+
     // Auto-create trial subscription if none exists
     if (!subscription) {
       try {
@@ -49,7 +49,7 @@ export class BillingController {
         return { status: 'none', message: 'No active subscription' };
       }
     }
-    
+
     return subscription || { status: 'none', message: 'No active subscription' };
   }
 

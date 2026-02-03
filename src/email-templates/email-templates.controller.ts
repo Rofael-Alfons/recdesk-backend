@@ -35,7 +35,10 @@ export class EmailTemplatesController {
   @Post()
   @Roles(UserRole.ADMIN, UserRole.RECRUITER)
   @ApiOperation({ summary: 'Create a new email template' })
-  @ApiResponse({ status: 201, description: 'Email template created successfully' })
+  @ApiResponse({
+    status: 201,
+    description: 'Email template created successfully',
+  })
   async create(
     @Body() dto: CreateEmailTemplateDto,
     @CurrentUser() user: CurrentUserData,

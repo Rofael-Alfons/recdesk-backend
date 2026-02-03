@@ -3,9 +3,9 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { EmailTemplateType } from './create-email-template.dto';
 
 export class QueryEmailTemplatesDto {
-  @ApiPropertyOptional({ 
-    description: 'Filter by template type', 
-    enum: EmailTemplateType 
+  @ApiPropertyOptional({
+    description: 'Filter by template type',
+    enum: EmailTemplateType,
   })
   @IsEnum(EmailTemplateType)
   @IsOptional()

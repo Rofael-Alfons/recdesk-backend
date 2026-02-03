@@ -13,7 +13,8 @@ import { CacheService } from './cache.service';
         const redisHost = configService.get<string>('redis.host');
         const redisPort = configService.get<number>('redis.port');
         const redisPassword = configService.get<string>('redis.password');
-        const isProduction = configService.get<string>('nodeEnv') === 'production';
+        const isProduction =
+          configService.get<string>('nodeEnv') === 'production';
 
         // Use Redis if configured, otherwise use in-memory cache
         if (redisHost && (isProduction || redisHost !== 'localhost')) {
@@ -39,4 +40,4 @@ import { CacheService } from './cache.service';
   providers: [CacheService],
   exports: [NestCacheModule, CacheService],
 })
-export class CacheModule { }
+export class CacheModule {}

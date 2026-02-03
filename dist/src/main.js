@@ -88,7 +88,8 @@ async function bootstrap() {
     }
     const jwtSecret = configService.get('jwt.secret');
     if (isProduction) {
-        if (!jwtSecret || jwtSecret === 'your-super-secret-key-change-in-production') {
+        if (!jwtSecret ||
+            jwtSecret === 'your-super-secret-key-change-in-production') {
             logger.error('FATAL: JWT_SECRET must be set to a strong secret in production!');
             process.exit(1);
         }

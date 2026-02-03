@@ -32,13 +32,16 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserData } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole, UsageType } from '@prisma/client';
-import { SubscriptionGuard, UsageCheck } from '../billing/guards/subscription.guard';
+import {
+  SubscriptionGuard,
+  UsageCheck,
+} from '../billing/guards/subscription.guard';
 
 @ApiTags('Candidates')
 @ApiBearerAuth()
 @Controller('candidates')
 export class CandidatesController {
-  constructor(private candidatesService: CandidatesService) { }
+  constructor(private candidatesService: CandidatesService) {}
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.RECRUITER)
@@ -78,7 +81,11 @@ export class CandidatesController {
     @Body() dto: BulkUpdateStatusDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.candidatesService.bulkUpdateStatus(dto, user.companyId, user.id);
+    return this.candidatesService.bulkUpdateStatus(
+      dto,
+      user.companyId,
+      user.id,
+    );
   }
 
   @Post('bulk/tags')

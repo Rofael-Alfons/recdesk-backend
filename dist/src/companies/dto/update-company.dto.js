@@ -21,7 +21,10 @@ class UpdateCompanyDto {
 }
 exports.UpdateCompanyDto = UpdateCompanyDto;
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ example: 'TechCorp Egypt', description: 'Company name' }),
+    (0, swagger_1.ApiPropertyOptional)({
+        example: 'TechCorp Egypt',
+        description: 'Company name',
+    }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MinLength)(2),
@@ -29,7 +32,10 @@ __decorate([
     __metadata("design:type", String)
 ], UpdateCompanyDto.prototype, "name", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ example: 'techcorp.com.eg', description: 'Company domain' }),
+    (0, swagger_1.ApiPropertyOptional)({
+        example: 'techcorp.com.eg',
+        description: 'Company domain',
+    }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.Matches)(/^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,}$/, {

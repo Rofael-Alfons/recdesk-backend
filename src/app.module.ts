@@ -58,12 +58,12 @@ const isRedisConfigured = (): boolean => {
             transport: isProduction
               ? undefined // JSON output in production for log aggregation
               : {
-                  target: 'pino-pretty',
-                  options: {
-                    singleLine: true,
-                    colorize: true,
-                  },
+                target: 'pino-pretty',
+                options: {
+                  singleLine: true,
+                  colorize: true,
                 },
+              },
             autoLogging: {
               ignore: (req) => {
                 // Don't log health check requests

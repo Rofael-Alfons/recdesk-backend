@@ -48,7 +48,11 @@ export class EmailSendingController {
     @Body() dto: BulkSendEmailDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.emailSendingService.bulkSendEmails(dto, user.id, user.companyId);
+    return this.emailSendingService.bulkSendEmails(
+      dto,
+      user.id,
+      user.companyId,
+    );
   }
 
   @Post('preview')
@@ -65,9 +69,23 @@ export class EmailSendingController {
   @Get('sent')
   @ApiOperation({ summary: 'Get sent emails history' })
   @ApiResponse({ status: 200, description: 'Sent emails retrieved' })
-  @ApiQuery({ name: 'candidateId', required: false, description: 'Filter by candidate ID' })
-  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page' })
+  @ApiQuery({
+    name: 'candidateId',
+    required: false,
+    description: 'Filter by candidate ID',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page',
+  })
   async getSentEmails(
     @CurrentUser() user: CurrentUserData,
     @Query('candidateId') candidateId?: string,

@@ -71,7 +71,11 @@ export class EmailMonitorService {
     const clientSecret = this.configService.get<string>('google.clientSecret');
     const redirectUri = this.configService.get<string>('google.redirectUri');
 
-    this.oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+    this.oauth2Client = new google.auth.OAuth2(
+      clientId,
+      clientSecret,
+      redirectUri,
+    );
   }
 
   /**
@@ -91,7 +95,9 @@ export class EmailMonitorService {
     }
 
     if (companyId && connection.companyId !== companyId) {
-      throw new BadRequestException('Connection does not belong to this company');
+      throw new BadRequestException(
+        'Connection does not belong to this company',
+      );
     }
 
     const result: SyncResult = {
@@ -105,13 +111,17 @@ export class EmailMonitorService {
 
     try {
       // Get valid access token
-      const accessToken = await this.integrationsService.getValidAccessToken(connectionId);
+      const accessToken =
+        await this.integrationsService.getValidAccessToken(connectionId);
       this.oauth2Client.setCredentials({ access_token: accessToken });
 
       const gmail = google.gmail({ version: 'v1', auth: this.oauth2Client });
 
       // Fetch new emails
-      const messages = await this.fetchNewEmails(gmail, connection.lastHistoryId);
+      const messages = await this.fetchNewEmails(
+        gmail,
+        connection.lastHistoryId,
+      );
 
       this.logger.log(
         `Found ${messages.length} new emails for connection ${connectionId}`,
@@ -129,7 +139,8 @@ export class EmailMonitorService {
             result.emailsSkipped++;
           }
         } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          const errorMsg =
+            error instanceof Error ? error.message : 'Unknown error';
           result.errors.push(`Message ${message.id}: ${errorMsg}`);
           this.logger.error(`Error processing email ${message.id}:`, error);
         }
@@ -169,8 +180,13 @@ export class EmailMonitorService {
 
       return result;
     } catch (error) {
-      this.logger.error(`Failed to poll emails for connection ${connectionId}:`, error);
-      result.errors.push(error instanceof Error ? error.message : 'Unknown error');
+      this.logger.error(
+        `Failed to poll emails for connection ${connectionId}:`,
+        error,
+      );
+      result.errors.push(
+        error instanceof Error ? error.message : 'Unknown error',
+      );
       return result;
     }
   }
@@ -292,7 +308,8 @@ export class EmailMonitorService {
     }
 
     // Extract email data
-    const { subject, from, bodyText, bodyHtml, headers } = this.extractEmailData(message);
+    const { subject, from, bodyText, bodyHtml, headers } =
+      this.extractEmailData(message);
 
     const senderEmail = this.extractEmail(from);
     const senderName = this.extractName(from);
@@ -317,8 +334,9 @@ export class EmailMonitorService {
     };
 
     // Run prefilter to check if we need AI classification
-    const prefilterResult = this.emailPrefilterService.prefilterEmail(emailData);
-    
+    const prefilterResult =
+      this.emailPrefilterService.prefilterEmail(emailData);
+
     this.logger.log(
       `Prefilter result for email ${message.id}: ${prefilterResult.action} - ${prefilterResult.reason}`,
     );
@@ -375,9 +393,12 @@ export class EmailMonitorService {
         confidence: aiClassification.confidence,
         detectedPosition: aiClassification.detectedPosition,
       };
-      
+
       // Track AI classification call (counts as AI_PARSING_CALL)
-      await this.billingService.trackUsage(connection.companyId, UsageType.AI_PARSING_CALL);
+      await this.billingService.trackUsage(
+        connection.companyId,
+        UsageType.AI_PARSING_CALL,
+      );
     }
 
     // Create email import record
@@ -394,9 +415,10 @@ export class EmailMonitorService {
         bodyText,
         bodyHtml,
         status: 'PENDING',
-        skipReason: prefilterResult.action === 'auto_classify' 
-          ? `Auto-classified: ${prefilterResult.reason}` 
-          : null,
+        skipReason:
+          prefilterResult.action === 'auto_classify'
+            ? `Auto-classified: ${prefilterResult.reason}`
+            : null,
         emailConnectionId: connection.id,
       },
     });
@@ -452,7 +474,10 @@ export class EmailMonitorService {
         });
 
         // Track email imported usage
-        await this.billingService.trackUsage(connection.companyId, UsageType.EMAIL_IMPORTED);
+        await this.billingService.trackUsage(
+          connection.companyId,
+          UsageType.EMAIL_IMPORTED,
+        );
 
         return { imported: true };
       } catch (error) {
@@ -461,7 +486,8 @@ export class EmailMonitorService {
           where: { id: emailImport.id },
           data: {
             status: 'FAILED',
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            errorMessage:
+              error instanceof Error ? error.message : 'Unknown error',
             processedAt: new Date(),
           },
         });
@@ -496,14 +522,20 @@ export class EmailMonitorService {
     const messageHeaders = message.payload?.headers || [];
 
     const getHeader = (name: string) =>
-      messageHeaders.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
+      messageHeaders.find((h) => h.name?.toLowerCase() === name.toLowerCase())
+        ?.value || '';
 
     const subject = getHeader('subject');
     const from = getHeader('from');
 
     // Build headers object for prefilter (only relevant headers)
     const headers: Record<string, string> = {};
-    const relevantHeaders = ['list-unsubscribe', 'x-mailer', 'x-auto-response-suppress', 'auto-submitted'];
+    const relevantHeaders = [
+      'list-unsubscribe',
+      'x-mailer',
+      'x-auto-response-suppress',
+      'auto-submitted',
+    ];
     for (const header of messageHeaders) {
       if (header.name && relevantHeaders.includes(header.name.toLowerCase())) {
         headers[header.name.toLowerCase()] = header.value || '';
@@ -647,11 +679,17 @@ export class EmailMonitorService {
     let aiSummary = null;
 
     try {
-      parsedData = await this.aiService.parseCV(extraction.text, attachment.filename);
+      parsedData = await this.aiService.parseCV(
+        extraction.text,
+        attachment.filename,
+      );
       aiSummary = parsedData.summary || null;
-      
+
       // Track AI parsing usage
-      await this.billingService.trackUsage(companyId, UsageType.AI_PARSING_CALL);
+      await this.billingService.trackUsage(
+        companyId,
+        UsageType.AI_PARSING_CALL,
+      );
     } catch (error) {
       this.logger.error('AI parsing error:', error);
       parsedData = this.extractBasicDataFromFilename(attachment.filename);
@@ -754,7 +792,9 @@ export class EmailMonitorService {
     });
 
     if (existing) {
-      this.logger.warn(`Duplicate candidate with email ${senderEmail}, skipping`);
+      this.logger.warn(
+        `Duplicate candidate with email ${senderEmail}, skipping`,
+      );
       return;
     }
 
@@ -837,7 +877,10 @@ export class EmailMonitorService {
       });
 
       // Track AI scoring usage
-      await this.billingService.trackUsage(candidate.companyId, UsageType.AI_SCORING_CALL);
+      await this.billingService.trackUsage(
+        candidate.companyId,
+        UsageType.AI_SCORING_CALL,
+      );
 
       // Save score
       await this.prisma.candidateScore.create({
@@ -883,7 +926,9 @@ export class EmailMonitorService {
       name
         .split(' ')
         .filter(Boolean)
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .map(
+          (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
+        )
         .join(' ') || 'Unknown Candidate'
     );
   }

@@ -88,13 +88,13 @@ export declare class CandidatesController {
     findOne(id: string, user: CurrentUserData): Promise<{
         scores: ({
             job: {
-                id: string;
                 title: string;
+                id: string;
             };
         } & {
+            jobId: string;
             id: string;
             overallScore: number;
-            jobId: string;
             scoredAt: Date;
             skillsMatchScore: number | null;
             experienceScore: number | null;
@@ -113,18 +113,18 @@ export declare class CandidatesController {
                 lastName: string;
             };
         } & {
-            id: string;
             createdAt: Date;
+            id: string;
             updatedAt: Date;
-            userId: string;
-            content: string;
             candidateId: string;
+            content: string;
+            userId: string;
         })[];
         stageHistory: ({
             stage: {
-                id: string;
-                name: string;
                 jobId: string;
+                name: string;
+                id: string;
                 orderIndex: number;
                 color: string;
                 isDefault: boolean;
@@ -198,12 +198,12 @@ export declare class CandidatesController {
             lastName: string;
         };
     } & {
-        id: string;
         createdAt: Date;
+        id: string;
         updatedAt: Date;
-        userId: string;
-        content: string;
         candidateId: string;
+        content: string;
+        userId: string;
     }>;
     rescoreForJob(id: string, dto: RescoreCandidateDto, user: CurrentUserData): Promise<{
         message: string;

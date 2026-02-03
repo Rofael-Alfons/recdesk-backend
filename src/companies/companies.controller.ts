@@ -71,7 +71,10 @@ export class CompaniesController {
   @Get(':id/stats')
   @ApiOperation({ summary: 'Get company statistics by ID' })
   @ApiResponse({ status: 200, description: 'Company statistics retrieved' })
-  @ApiResponse({ status: 403, description: 'Can only view your own company stats' })
+  @ApiResponse({
+    status: 403,
+    description: 'Can only view your own company stats',
+  })
   async getStats(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: CurrentUserData,
@@ -90,6 +93,11 @@ export class CompaniesController {
     @Body() dto: UpdateCompanyDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.companiesService.update(id, dto, user.id, user.role as UserRole);
+    return this.companiesService.update(
+      id,
+      dto,
+      user.id,
+      user.role as UserRole,
+    );
   }
 }

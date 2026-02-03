@@ -20,7 +20,7 @@ exports.QueryEmailTemplatesDto = QueryEmailTemplatesDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Filter by template type',
-        enum: create_email_template_dto_1.EmailTemplateType
+        enum: create_email_template_dto_1.EmailTemplateType,
     }),
     (0, class_validator_1.IsEnum)(create_email_template_dto_1.EmailTemplateType),
     (0, class_validator_1.IsOptional)(),

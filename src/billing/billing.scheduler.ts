@@ -15,11 +15,11 @@ export class BillingScheduler {
   @Cron('0 1 * * *') // Daily at 1:00 AM
   async checkExpiredSubscriptions() {
     this.logger.log('Starting daily subscription expiration check...');
-    
+
     try {
       const result = await this.billingService.checkAndExpireSubscriptions();
       this.logger.log(
-        `Subscription expiration check completed: ${result.expired} expired, ${result.notified} notified`
+        `Subscription expiration check completed: ${result.expired} expired, ${result.notified} notified`,
       );
     } catch (error) {
       this.logger.error('Error during subscription expiration check:', error);
@@ -33,10 +33,12 @@ export class BillingScheduler {
   @Cron('0 9 * * *') // Daily at 9:00 AM
   async sendTrialExpirationWarnings() {
     this.logger.log('Starting trial expiration warning check...');
-    
+
     try {
       const result = await this.billingService.sendTrialWarnings();
-      this.logger.log(`Trial warning check completed: ${result.notified} notifications sent`);
+      this.logger.log(
+        `Trial warning check completed: ${result.notified} notifications sent`,
+      );
     } catch (error) {
       this.logger.error('Error during trial warning check:', error);
     }
@@ -49,10 +51,12 @@ export class BillingScheduler {
   @Cron('0 2 * * *') // Daily at 2:00 AM
   async checkGracePeriods() {
     this.logger.log('Starting grace period check...');
-    
+
     try {
       const result = await this.billingService.checkGracePeriods();
-      this.logger.log(`Grace period check completed: ${result.expired} grace periods expired`);
+      this.logger.log(
+        `Grace period check completed: ${result.expired} grace periods expired`,
+      );
     } catch (error) {
       this.logger.error('Error during grace period check:', error);
     }
@@ -65,7 +69,7 @@ export class BillingScheduler {
   @Cron(CronExpression.EVERY_WEEK) // Weekly
   async seedSubscriptionPlans() {
     this.logger.log('Seeding subscription plans...');
-    
+
     try {
       await this.billingService.seedPlans();
       this.logger.log('Subscription plans seeded successfully');

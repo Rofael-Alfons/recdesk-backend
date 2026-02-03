@@ -29,14 +29,20 @@ class CreateEmailTemplateDto {
 }
 exports.CreateEmailTemplateDto = CreateEmailTemplateDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Template name', example: 'Professional Rejection' }),
+    (0, swagger_1.ApiProperty)({
+        description: 'Template name',
+        example: 'Professional Rejection',
+    }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MinLength)(1),
     (0, class_validator_1.MaxLength)(100),
     __metadata("design:type", String)
 ], CreateEmailTemplateDto.prototype, "name", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Email subject line', example: 'Update on your application for {{job_title}}' }),
+    (0, swagger_1.ApiProperty)({
+        description: 'Email subject line',
+        example: 'Update on your application for {{job_title}}',
+    }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MinLength)(1),
     (0, class_validator_1.MaxLength)(200),
@@ -45,7 +51,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Email body with personalization tokens',
-        example: 'Dear {{candidate_name}},\n\nThank you for your interest in the {{job_title}} position...'
+        example: 'Dear {{candidate_name}},\n\nThank you for your interest in the {{job_title}} position...',
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MinLength)(1),
@@ -55,13 +61,16 @@ __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Template type',
         enum: EmailTemplateType,
-        example: EmailTemplateType.REJECTION
+        example: EmailTemplateType.REJECTION,
     }),
     (0, class_validator_1.IsEnum)(EmailTemplateType),
     __metadata("design:type", String)
 ], CreateEmailTemplateDto.prototype, "type", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Set as default template for this type', default: false }),
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Set as default template for this type',
+        default: false,
+    }),
     (0, class_validator_1.IsBoolean)(),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Boolean)

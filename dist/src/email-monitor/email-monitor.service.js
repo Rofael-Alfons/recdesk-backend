@@ -383,11 +383,17 @@ let EmailMonitorService = EmailMonitorService_1 = class EmailMonitorService {
     }
     extractEmailData(message) {
         const messageHeaders = message.payload?.headers || [];
-        const getHeader = (name) => messageHeaders.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
+        const getHeader = (name) => messageHeaders.find((h) => h.name?.toLowerCase() === name.toLowerCase())
+            ?.value || '';
         const subject = getHeader('subject');
         const from = getHeader('from');
         const headers = {};
-        const relevantHeaders = ['list-unsubscribe', 'x-mailer', 'x-auto-response-suppress', 'auto-submitted'];
+        const relevantHeaders = [
+            'list-unsubscribe',
+            'x-mailer',
+            'x-auto-response-suppress',
+            'auto-submitted',
+        ];
         for (const header of messageHeaders) {
             if (header.name && relevantHeaders.includes(header.name.toLowerCase())) {
                 headers[header.name.toLowerCase()] = header.value || '';

@@ -72,7 +72,10 @@ __decorate([
     __metadata("design:type", String)
 ], CreateCandidateDto.prototype, "portfolioUrl", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ enum: client_1.CandidateSource, default: client_1.CandidateSource.MANUAL }),
+    (0, swagger_1.ApiPropertyOptional)({
+        enum: client_1.CandidateSource,
+        default: client_1.CandidateSource.MANUAL,
+    }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(client_1.CandidateSource),
     __metadata("design:type", String)

@@ -23,7 +23,9 @@ __decorate([
     __metadata("design:type", String)
 ], PreviewEmailDto.prototype, "templateId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Candidate ID to use for personalization (optional - uses sample data if not provided)' }),
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Candidate ID to use for personalization (optional - uses sample data if not provided)',
+    }),
     (0, class_validator_1.IsUUID)(),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
