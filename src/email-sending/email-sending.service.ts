@@ -10,7 +10,7 @@ import { EmailTemplatesService } from '../email-templates/email-templates.servic
 import { TemplateEngineService, PersonalizationContext } from './template-engine.service';
 import { BillingService } from '../billing/billing.service';
 import { SendEmailDto, BulkSendEmailDto, PreviewEmailDto } from './dto';
-import * as sgMail from '@sendgrid/mail';
+import sgMail from '@sendgrid/mail';
 
 export interface SendResult {
   candidateId: string;

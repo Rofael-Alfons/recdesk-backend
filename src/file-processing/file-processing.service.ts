@@ -1,8 +1,9 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PDFParse } from 'pdf-parse';
 import mammoth from 'mammoth';
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import { StorageService } from '../storage/storage.service';
 
 export interface TextExtractionResult {
   text: string;
@@ -13,8 +14,11 @@ export interface TextExtractionResult {
 
 @Injectable()
 export class FileProcessingService {
+  private readonly logger = new Logger(FileProcessingService.name);
   private readonly supportedExtensions = ['.pdf', '.docx', '.doc'];
   private readonly maxFileSize = 10 * 1024 * 1024; // 10MB
+
+  constructor(private storageService: StorageService) {}
 
   async extractText(
     fileBuffer: Buffer,
@@ -173,15 +177,41 @@ export class FileProcessingService {
   }
 
   /**
-   * Extract text from a file path (for background processing)
+   * Extract text from a file path or S3 key (for background processing)
+   * Supports:
+   * - Local paths: /uploads/cvs/filename.pdf
+   * - S3 URLs: s3://bucket/cvs/filename.pdf
+   * - S3 keys: cvs/filename.pdf
    */
-  async extractTextFromFile(filePath: string): Promise<TextExtractionResult> {
+  async extractTextFromFile(filePathOrKey: string): Promise<TextExtractionResult> {
     try {
-      const fileName = path.basename(filePath);
-      const fileBuffer = await fs.readFile(filePath);
+      let fileBuffer: Buffer;
+      let fileName: string;
+
+      // Determine if this is an S3 URL/key or local path
+      if (
+        filePathOrKey.startsWith('s3://') ||
+        (!filePathOrKey.startsWith('/') && !filePathOrKey.startsWith('.'))
+      ) {
+        // S3 URL or key - download from storage
+        this.logger.debug(`Downloading file from storage: ${filePathOrKey}`);
+        fileBuffer = await this.storageService.downloadFile(filePathOrKey);
+        fileName = path.basename(filePathOrKey);
+      } else if (filePathOrKey.startsWith('/uploads/')) {
+        // Legacy local path - try storage service first (handles both local and S3 fallback)
+        this.logger.debug(`Downloading file from local path via storage: ${filePathOrKey}`);
+        fileBuffer = await this.storageService.downloadFile(filePathOrKey);
+        fileName = path.basename(filePathOrKey);
+      } else {
+        // Absolute local path - read directly from filesystem
+        this.logger.debug(`Reading file directly from filesystem: ${filePathOrKey}`);
+        fileBuffer = await fs.readFile(filePathOrKey);
+        fileName = path.basename(filePathOrKey);
+      }
+
       return this.extractText(fileBuffer, fileName);
     } catch (error) {
-      console.error(`Error reading file ${filePath}:`, error);
+      this.logger.error(`Error reading file ${filePathOrKey}:`, error);
       return {
         text: '',
         confidence: 0,

@@ -6,25 +6,25 @@ export declare class EmailTemplatesController {
     constructor(emailTemplatesService: EmailTemplatesService);
     create(dto: CreateEmailTemplateDto, user: CurrentUserData): Promise<{
         id: string;
-        name: string;
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
+        name: string;
         isDefault: boolean;
-        subject: string;
-        body: string;
         type: import("@prisma/client").$Enums.EmailTemplateType;
+        body: string;
+        subject: string;
     }>;
     findAll(query: QueryEmailTemplatesDto, user: CurrentUserData): Promise<{
         id: string;
-        name: string;
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
+        name: string;
         isDefault: boolean;
-        subject: string;
-        body: string;
         type: import("@prisma/client").$Enums.EmailTemplateType;
+        body: string;
+        subject: string;
     }[]>;
     getTokens(): Promise<{
         token: string;
@@ -32,25 +32,25 @@ export declare class EmailTemplatesController {
     }[]>;
     findOne(id: string, user: CurrentUserData): Promise<{
         id: string;
-        name: string;
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
+        name: string;
         isDefault: boolean;
-        subject: string;
-        body: string;
         type: import("@prisma/client").$Enums.EmailTemplateType;
+        body: string;
+        subject: string;
     }>;
     update(id: string, dto: UpdateEmailTemplateDto, user: CurrentUserData): Promise<{
         id: string;
-        name: string;
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
+        name: string;
         isDefault: boolean;
-        subject: string;
-        body: string;
         type: import("@prisma/client").$Enums.EmailTemplateType;
+        body: string;
+        subject: string;
     }>;
     remove(id: string, user: CurrentUserData): Promise<{
         message: string;

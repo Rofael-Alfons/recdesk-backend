@@ -8,13 +8,13 @@ export declare class UsersService {
     constructor(prisma: PrismaService, configService: ConfigService);
     findAll(companyId: string): Promise<{
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         email: string;
         firstName: string;
         lastName: string;
         role: import("@prisma/client").$Enums.UserRole;
         isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
     }[]>;
     findOne(userId: string, companyId: string): Promise<{
         id: string;
@@ -34,25 +34,25 @@ export declare class UsersService {
     invite(dto: InviteUserDto, companyId: string, requestingUserRole: UserRole): Promise<{
         user: {
             id: string;
-            createdAt: Date;
             email: string;
             firstName: string;
             lastName: string;
             role: import("@prisma/client").$Enums.UserRole;
             isActive: boolean;
+            createdAt: Date;
         };
         tempPassword: string;
         message: string;
     }>;
     update(userId: string, dto: UpdateUserDto, companyId: string, requestingUserId: string, requestingUserRole: UserRole): Promise<{
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         email: string;
         firstName: string;
         lastName: string;
         role: import("@prisma/client").$Enums.UserRole;
         isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
     }>;
     remove(userId: string, companyId: string, requestingUserId: string, requestingUserRole: UserRole): Promise<{
         message: string;

@@ -3,12 +3,14 @@ import { CreateCandidateDto, UpdateCandidateDto, QueryCandidatesDto, BulkUpdateS
 import { Prisma } from '@prisma/client';
 import { QueueService } from '../queue/queue.service';
 import { AiService } from '../ai/ai.service';
+import { StorageService } from '../storage/storage.service';
 export declare class CandidatesService {
     private prisma;
     private aiService;
+    private storageService;
     private queueService?;
     private readonly logger;
-    constructor(prisma: PrismaService, aiService: AiService, queueService?: QueueService | undefined);
+    constructor(prisma: PrismaService, aiService: AiService, storageService: StorageService, queueService?: QueueService | undefined);
     create(dto: CreateCandidateDto, companyId: string): Promise<{
         id: any;
         fullName: any;
@@ -21,6 +23,7 @@ export declare class CandidatesService {
         source: any;
         status: any;
         cvFileUrl: any;
+        cvFileSignedUrl: string | null;
         cvFileName: any;
         overallScore: any;
         aiSummary: any;
@@ -48,6 +51,7 @@ export declare class CandidatesService {
             source: any;
             status: any;
             cvFileUrl: any;
+            cvFileSignedUrl: string | null;
             cvFileName: any;
             overallScore: any;
             aiSummary: any;
@@ -77,8 +81,9 @@ export declare class CandidatesService {
             };
         } & {
             id: string;
-            jobId: string;
             overallScore: number;
+            jobId: string;
+            scoredAt: Date;
             skillsMatchScore: number | null;
             experienceScore: number | null;
             educationScore: number | null;
@@ -87,7 +92,6 @@ export declare class CandidatesService {
             scoreExplanation: Prisma.JsonValue | null;
             recommendation: string | null;
             algorithmVersion: string;
-            scoredAt: Date;
             candidateId: string;
         })[];
         notes: ({
@@ -100,23 +104,23 @@ export declare class CandidatesService {
             id: string;
             createdAt: Date;
             updatedAt: Date;
-            candidateId: string;
-            content: string;
             userId: string;
+            content: string;
+            candidateId: string;
         })[];
         stageHistory: ({
             stage: {
                 id: string;
                 name: string;
+                jobId: string;
                 orderIndex: number;
                 color: string;
                 isDefault: boolean;
-                jobId: string;
             };
         } & {
             id: string;
-            candidateId: string;
             movedAt: Date;
+            candidateId: string;
             stageId: string;
         })[];
         id: any;
@@ -130,6 +134,7 @@ export declare class CandidatesService {
         source: any;
         status: any;
         cvFileUrl: any;
+        cvFileSignedUrl: string | null;
         cvFileName: any;
         overallScore: any;
         aiSummary: any;
@@ -156,6 +161,7 @@ export declare class CandidatesService {
         source: any;
         status: any;
         cvFileUrl: any;
+        cvFileSignedUrl: string | null;
         cvFileName: any;
         overallScore: any;
         aiSummary: any;
@@ -202,9 +208,9 @@ export declare class CandidatesService {
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        candidateId: string;
-        content: string;
         userId: string;
+        content: string;
+        candidateId: string;
     }>;
     rescoreForJob(candidateId: string, dto: RescoreCandidateDto, companyId: string): Promise<{
         message: string;
@@ -220,4 +226,5 @@ export declare class CandidatesService {
         score: number;
     }>;
     private formatCandidateResponse;
+    getCvSignedUrl(candidateId: string, companyId: string): Promise<string>;
 }

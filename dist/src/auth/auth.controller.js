@@ -18,6 +18,7 @@ const swagger_1 = require("@nestjs/swagger");
 const auth_service_1 = require("./auth.service");
 const dto_1 = require("./dto");
 const public_decorator_1 = require("../common/decorators/public.decorator");
+const throttle_auth_decorator_1 = require("../common/decorators/throttle-auth.decorator");
 let AuthController = class AuthController {
     authService;
     constructor(authService) {
@@ -46,6 +47,7 @@ let AuthController = class AuthController {
 exports.AuthController = AuthController;
 __decorate([
     (0, public_decorator_1.Public)(),
+    (0, throttle_auth_decorator_1.ThrottleRegistration)(),
     (0, common_1.Post)('register'),
     (0, swagger_1.ApiOperation)({ summary: 'Register a new user and company' }),
     (0, swagger_1.ApiResponse)({ status: 201, description: 'User registered successfully' }),
@@ -57,6 +59,7 @@ __decorate([
 ], AuthController.prototype, "register", null);
 __decorate([
     (0, public_decorator_1.Public)(),
+    (0, throttle_auth_decorator_1.ThrottleAuth)(),
     (0, common_1.Post)('login'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     (0, swagger_1.ApiOperation)({ summary: 'Login with email and password' }),
@@ -69,6 +72,7 @@ __decorate([
 ], AuthController.prototype, "login", null);
 __decorate([
     (0, public_decorator_1.Public)(),
+    (0, throttle_auth_decorator_1.ThrottleAuth)(),
     (0, common_1.Post)('refresh'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     (0, swagger_1.ApiOperation)({ summary: 'Refresh access token' }),
@@ -91,6 +95,7 @@ __decorate([
 ], AuthController.prototype, "logout", null);
 __decorate([
     (0, public_decorator_1.Public)(),
+    (0, throttle_auth_decorator_1.ThrottleAuth)(),
     (0, common_1.Post)('forgot-password'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     (0, swagger_1.ApiOperation)({ summary: 'Request password reset email' }),
@@ -102,6 +107,7 @@ __decorate([
 ], AuthController.prototype, "forgotPassword", null);
 __decorate([
     (0, public_decorator_1.Public)(),
+    (0, throttle_auth_decorator_1.ThrottleAuth)(),
     (0, common_1.Post)('reset-password'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     (0, swagger_1.ApiOperation)({ summary: 'Reset password with token' }),

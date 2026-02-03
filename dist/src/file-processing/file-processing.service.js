@@ -38,9 +38,13 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var FileProcessingService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FileProcessingService = void 0;
 const common_1 = require("@nestjs/common");
@@ -48,9 +52,15 @@ const pdf_parse_1 = require("pdf-parse");
 const mammoth_1 = __importDefault(require("mammoth"));
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs/promises"));
-let FileProcessingService = class FileProcessingService {
+const storage_service_1 = require("../storage/storage.service");
+let FileProcessingService = FileProcessingService_1 = class FileProcessingService {
+    storageService;
+    logger = new common_1.Logger(FileProcessingService_1.name);
     supportedExtensions = ['.pdf', '.docx', '.doc'];
     maxFileSize = 10 * 1024 * 1024;
+    constructor(storageService) {
+        this.storageService = storageService;
+    }
     async extractText(fileBuffer, fileName) {
         const ext = path.extname(fileName).toLowerCase();
         if (!this.supportedExtensions.includes(ext)) {
@@ -178,14 +188,30 @@ let FileProcessingService = class FileProcessingService {
     getSupportedExtensions() {
         return [...this.supportedExtensions];
     }
-    async extractTextFromFile(filePath) {
+    async extractTextFromFile(filePathOrKey) {
         try {
-            const fileName = path.basename(filePath);
-            const fileBuffer = await fs.readFile(filePath);
+            let fileBuffer;
+            let fileName;
+            if (filePathOrKey.startsWith('s3://') ||
+                (!filePathOrKey.startsWith('/') && !filePathOrKey.startsWith('.'))) {
+                this.logger.debug(`Downloading file from storage: ${filePathOrKey}`);
+                fileBuffer = await this.storageService.downloadFile(filePathOrKey);
+                fileName = path.basename(filePathOrKey);
+            }
+            else if (filePathOrKey.startsWith('/uploads/')) {
+                this.logger.debug(`Downloading file from local path via storage: ${filePathOrKey}`);
+                fileBuffer = await this.storageService.downloadFile(filePathOrKey);
+                fileName = path.basename(filePathOrKey);
+            }
+            else {
+                this.logger.debug(`Reading file directly from filesystem: ${filePathOrKey}`);
+                fileBuffer = await fs.readFile(filePathOrKey);
+                fileName = path.basename(filePathOrKey);
+            }
             return this.extractText(fileBuffer, fileName);
         }
         catch (error) {
-            console.error(`Error reading file ${filePath}:`, error);
+            this.logger.error(`Error reading file ${filePathOrKey}:`, error);
             return {
                 text: '',
                 confidence: 0,
@@ -195,7 +221,8 @@ let FileProcessingService = class FileProcessingService {
     }
 };
 exports.FileProcessingService = FileProcessingService;
-exports.FileProcessingService = FileProcessingService = __decorate([
-    (0, common_1.Injectable)()
+exports.FileProcessingService = FileProcessingService = FileProcessingService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [storage_service_1.StorageService])
 ], FileProcessingService);
 //# sourceMappingURL=file-processing.service.js.map

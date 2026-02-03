@@ -16,6 +16,7 @@ export declare class CandidatesController {
         source: any;
         status: any;
         cvFileUrl: any;
+        cvFileSignedUrl: string | null;
         cvFileName: any;
         overallScore: any;
         aiSummary: any;
@@ -43,6 +44,7 @@ export declare class CandidatesController {
             source: any;
             status: any;
             cvFileUrl: any;
+            cvFileSignedUrl: string | null;
             cvFileName: any;
             overallScore: any;
             aiSummary: any;
@@ -91,8 +93,9 @@ export declare class CandidatesController {
             };
         } & {
             id: string;
-            jobId: string;
             overallScore: number;
+            jobId: string;
+            scoredAt: Date;
             skillsMatchScore: number | null;
             experienceScore: number | null;
             educationScore: number | null;
@@ -101,7 +104,6 @@ export declare class CandidatesController {
             scoreExplanation: import("@prisma/client/runtime/library").JsonValue | null;
             recommendation: string | null;
             algorithmVersion: string;
-            scoredAt: Date;
             candidateId: string;
         })[];
         notes: ({
@@ -114,23 +116,23 @@ export declare class CandidatesController {
             id: string;
             createdAt: Date;
             updatedAt: Date;
-            candidateId: string;
-            content: string;
             userId: string;
+            content: string;
+            candidateId: string;
         })[];
         stageHistory: ({
             stage: {
                 id: string;
                 name: string;
+                jobId: string;
                 orderIndex: number;
                 color: string;
                 isDefault: boolean;
-                jobId: string;
             };
         } & {
             id: string;
-            candidateId: string;
             movedAt: Date;
+            candidateId: string;
             stageId: string;
         })[];
         id: any;
@@ -144,6 +146,7 @@ export declare class CandidatesController {
         source: any;
         status: any;
         cvFileUrl: any;
+        cvFileSignedUrl: string | null;
         cvFileName: any;
         overallScore: any;
         aiSummary: any;
@@ -170,6 +173,7 @@ export declare class CandidatesController {
         source: any;
         status: any;
         cvFileUrl: any;
+        cvFileSignedUrl: string | null;
         cvFileName: any;
         overallScore: any;
         aiSummary: any;
@@ -197,9 +201,9 @@ export declare class CandidatesController {
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        candidateId: string;
-        content: string;
         userId: string;
+        content: string;
+        candidateId: string;
     }>;
     rescoreForJob(id: string, dto: RescoreCandidateDto, user: CurrentUserData): Promise<{
         message: string;
@@ -213,5 +217,8 @@ export declare class CandidatesController {
         jobId: string;
         jobTitle: string;
         score: number;
+    }>;
+    getCvSignedUrl(id: string, user: CurrentUserData): Promise<{
+        url: string;
     }>;
 }

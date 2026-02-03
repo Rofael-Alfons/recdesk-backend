@@ -1,0 +1,33 @@
+# Railway Configuration for RecDesk Backend
+# This file configures how Railway builds and deploys the application
+# Documentation: https://docs.railway.app/reference/config-as-code
+
+[build]
+# Use Nixpacks for automatic build detection
+builder = "nixpacks"
+
+# Build command with increased memory limit for Node.js
+# The --max-old-space-size flag increases heap memory to prevent OOM during build
+buildCommand = "npm ci && npx prisma generate && NODE_OPTIONS='--max-old-space-size=1024' npm run build"
+
+[deploy]
+# Start command for the application
+startCommand = "npx prisma migrate deploy && npm run start:prod"
+
+# Health check endpoint
+healthcheckPath = "/api/health"
+
+# Health check timeout in seconds
+healthcheckTimeout = 300
+
+# Number of replicas (adjust per environment in Railway dashboard)
+numReplicas = 1
+
+# Restart policy: on_failure, always, never
+restartPolicyType = "on_failure"
+
+# Maximum restart retries
+restartPolicyMaxRetries = 3
+
+# Sleep application when idle (disable for production)
+# sleepApplication = false

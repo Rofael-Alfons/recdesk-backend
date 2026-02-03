@@ -41,6 +41,7 @@ var __importStar = (this && this.__importStar) || (function () {
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var UploadService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UploadService = void 0;
 const common_1 = require("@nestjs/common");
@@ -49,33 +50,24 @@ const prisma_service_1 = require("../prisma/prisma.service");
 const file_processing_service_1 = require("../file-processing/file-processing.service");
 const ai_service_1 = require("../ai/ai.service");
 const billing_service_1 = require("../billing/billing.service");
+const storage_service_1 = require("../storage/storage.service");
 const client_1 = require("@prisma/client");
-const uuid_1 = require("uuid");
 const path = __importStar(require("path"));
-const fs = __importStar(require("fs/promises"));
-let UploadService = class UploadService {
+let UploadService = UploadService_1 = class UploadService {
     prisma;
     fileProcessingService;
     aiService;
     configService;
     billingService;
-    uploadDir;
-    constructor(prisma, fileProcessingService, aiService, configService, billingService) {
+    storageService;
+    logger = new common_1.Logger(UploadService_1.name);
+    constructor(prisma, fileProcessingService, aiService, configService, billingService, storageService) {
         this.prisma = prisma;
         this.fileProcessingService = fileProcessingService;
         this.aiService = aiService;
         this.configService = configService;
         this.billingService = billingService;
-        this.uploadDir = path.join(process.cwd(), 'uploads', 'cvs');
-        this.ensureUploadDir();
-    }
-    async ensureUploadDir() {
-        try {
-            await fs.mkdir(this.uploadDir, { recursive: true });
-        }
-        catch (error) {
-            console.error('Failed to create upload directory:', error);
-        }
+        this.storageService = storageService;
     }
     async uploadBulkCVs(files, companyId, jobId) {
         if (!files || files.length === 0) {
@@ -123,11 +115,8 @@ let UploadService = class UploadService {
             if (!validation.valid) {
                 return { fileName, status: 'failed', error: validation.error };
             }
-            const fileId = (0, uuid_1.v4)();
-            const ext = path.extname(fileName);
-            const savedFileName = `${fileId}${ext}`;
-            const filePath = path.join(this.uploadDir, savedFileName);
-            await fs.writeFile(filePath, file.buffer);
+            const uploadResult = await this.storageService.uploadFile(file.buffer, fileName, file.mimetype, companyId, 'cvs');
+            this.logger.debug(`File uploaded: ${fileName} -> ${uploadResult.key} (local: ${uploadResult.isLocal})`);
             const extraction = await this.fileProcessingService.extractText(file.buffer, fileName);
             if (!extraction.text || extraction.confidence < 30) {
                 return {
@@ -173,7 +162,7 @@ let UploadService = class UploadService {
                     portfolioUrl: parsedData.personalInfo?.portfolioUrl,
                     source: 'UPLOAD',
                     status: 'NEW',
-                    cvFileUrl: `/uploads/cvs/${savedFileName}`,
+                    cvFileUrl: uploadResult.url,
                     cvFileName: fileName,
                     cvText: extraction.text,
                     extractionConfidence: extraction.confidence,
@@ -304,12 +293,13 @@ let UploadService = class UploadService {
     }
 };
 exports.UploadService = UploadService;
-exports.UploadService = UploadService = __decorate([
+exports.UploadService = UploadService = UploadService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         file_processing_service_1.FileProcessingService,
         ai_service_1.AiService,
         config_1.ConfigService,
-        billing_service_1.BillingService])
+        billing_service_1.BillingService,
+        storage_service_1.StorageService])
 ], UploadService);
 //# sourceMappingURL=upload.service.js.map

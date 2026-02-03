@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CacheService } from '../cache/cache.service';
 import { UsageType } from '@prisma/client';
 export interface UsageStats {
     cvProcessed: number;
@@ -36,26 +37,14 @@ export declare class BillingService {
     private prisma;
     private configService;
     private notificationsService;
+    private cacheService;
     private readonly logger;
     private stripe;
-    constructor(prisma: PrismaService, configService: ConfigService, notificationsService: NotificationsService);
+    constructor(prisma: PrismaService, configService: ConfigService, notificationsService: NotificationsService, cacheService: CacheService);
     private ensureStripe;
     getPlans(companyId?: string): Promise<PlanDetails[]>;
-    getSubscription(companyId: string): Promise<{
-        id: string;
-        status: import("@prisma/client").$Enums.SubscriptionStatus;
-        plan: {
-            id: string;
-            name: string;
-            cvLimit: number;
-            userLimit: number;
-            features: import("@prisma/client/runtime/library").JsonValue;
-        };
-        currentPeriodStart: Date;
-        currentPeriodEnd: Date;
-        cancelAtPeriodEnd: boolean;
-        trialEndsAt: Date | null;
-    } | null>;
+    getSubscription(companyId: string): Promise<any>;
+    invalidateSubscriptionCache(companyId: string): Promise<void>;
     createCheckoutSession(companyId: string, priceId: string, successUrl: string, cancelUrl: string): Promise<{
         sessionId: string;
         url: string;

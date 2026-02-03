@@ -22,33 +22,33 @@ export declare class UsersController {
     }>;
     updateMe(dto: UpdateUserDto, user: CurrentUserData): Promise<{
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         email: string;
         firstName: string;
         lastName: string;
         role: import("@prisma/client").$Enums.UserRole;
         isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
     }>;
     findAll(user: CurrentUserData): Promise<{
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         email: string;
         firstName: string;
         lastName: string;
         role: import("@prisma/client").$Enums.UserRole;
         isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
     }[]>;
     invite(dto: InviteUserDto, user: CurrentUserData): Promise<{
         user: {
             id: string;
-            createdAt: Date;
             email: string;
             firstName: string;
             lastName: string;
             role: import("@prisma/client").$Enums.UserRole;
             isActive: boolean;
+            createdAt: Date;
         };
         tempPassword: string;
         message: string;
@@ -70,13 +70,13 @@ export declare class UsersController {
     }>;
     update(id: string, dto: UpdateUserDto, user: CurrentUserData): Promise<{
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         email: string;
         firstName: string;
         lastName: string;
         role: import("@prisma/client").$Enums.UserRole;
         isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
     }>;
     remove(id: string, user: CurrentUserData): Promise<{
         message: string;

@@ -23,14 +23,14 @@ export declare class JwtStrategy extends JwtStrategy_base {
         companyId: string;
         company: {
             id: string;
+            createdAt: Date;
+            updatedAt: Date;
             name: string;
             domain: string | null;
             mode: import("@prisma/client").$Enums.CompanyMode;
             plan: import("@prisma/client").$Enums.PlanType;
             stripeCustomerId: string | null;
             lastActivityAt: Date | null;
-            createdAt: Date;
-            updatedAt: Date;
         };
     }>;
 }

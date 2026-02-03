@@ -6,6 +6,7 @@ import { AiService } from '../ai/ai.service';
 import { FileProcessingService } from '../file-processing/file-processing.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { BillingService } from '../billing/billing.service';
+import { StorageService } from '../storage/storage.service';
 import { EmailPrefilterService } from './email-prefilter.service';
 export interface GmailMessage {
     id: string;
@@ -40,11 +41,10 @@ export declare class EmailMonitorService {
     private emailPrefilterService;
     private notificationsService;
     private billingService;
+    private storageService;
     private readonly logger;
     private oauth2Client;
-    private uploadDir;
-    constructor(prisma: PrismaService, configService: ConfigService, integrationsService: IntegrationsService, aiService: AiService, fileProcessingService: FileProcessingService, emailPrefilterService: EmailPrefilterService, notificationsService: NotificationsService, billingService: BillingService);
-    private ensureUploadDir;
+    constructor(prisma: PrismaService, configService: ConfigService, integrationsService: IntegrationsService, aiService: AiService, fileProcessingService: FileProcessingService, emailPrefilterService: EmailPrefilterService, notificationsService: NotificationsService, billingService: BillingService, storageService: StorageService);
     pollEmailsForConnection(connectionId: string, companyId?: string): Promise<SyncResult>;
     private fetchNewEmails;
     private getMessageDetails;

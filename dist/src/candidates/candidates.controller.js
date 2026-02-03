@@ -59,6 +59,10 @@ let CandidatesController = class CandidatesController {
     async rescoreForJob(id, dto, user) {
         return this.candidatesService.rescoreForJob(id, dto, user.companyId);
     }
+    async getCvSignedUrl(id, user) {
+        const url = await this.candidatesService.getCvSignedUrl(id, user.companyId);
+        return { url };
+    }
 };
 exports.CandidatesController = CandidatesController;
 __decorate([
@@ -193,6 +197,21 @@ __decorate([
     __metadata("design:paramtypes", [String, dto_1.RescoreCandidateDto, Object]),
     __metadata("design:returntype", Promise)
 ], CandidatesController.prototype, "rescoreForJob", null);
+__decorate([
+    (0, common_1.Get)(':id/cv-url'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get signed URL for candidate CV file' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Signed URL generated successfully',
+    }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Candidate has no CV file' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Candidate not found' }),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], CandidatesController.prototype, "getCvSignedUrl", null);
 exports.CandidatesController = CandidatesController = __decorate([
     (0, swagger_1.ApiTags)('Candidates'),
     (0, swagger_1.ApiBearerAuth)(),

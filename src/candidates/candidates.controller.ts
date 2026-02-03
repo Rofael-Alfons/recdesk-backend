@@ -169,4 +169,20 @@ export class CandidatesController {
   ) {
     return this.candidatesService.rescoreForJob(id, dto, user.companyId);
   }
+
+  @Get(':id/cv-url')
+  @ApiOperation({ summary: 'Get signed URL for candidate CV file' })
+  @ApiResponse({
+    status: 200,
+    description: 'Signed URL generated successfully',
+  })
+  @ApiResponse({ status: 400, description: 'Candidate has no CV file' })
+  @ApiResponse({ status: 404, description: 'Candidate not found' })
+  async getCvSignedUrl(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    const url = await this.candidatesService.getCvSignedUrl(id, user.companyId);
+    return { url };
+  }
 }

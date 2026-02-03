@@ -12,10 +12,9 @@ import { AiService } from '../ai/ai.service';
 import { FileProcessingService } from '../file-processing/file-processing.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { BillingService } from '../billing/billing.service';
+import { StorageService } from '../storage/storage.service';
 import { EmailPrefilterService, EmailData } from './email-prefilter.service';
-import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
-import * as fs from 'fs/promises';
 import { NotificationType, UsageType } from '@prisma/client';
 
 export interface GmailMessage {
@@ -56,7 +55,6 @@ const CV_MIME_TYPES = [
 export class EmailMonitorService {
   private readonly logger = new Logger(EmailMonitorService.name);
   private oauth2Client;
-  private uploadDir: string;
 
   constructor(
     private prisma: PrismaService,
@@ -67,24 +65,13 @@ export class EmailMonitorService {
     private emailPrefilterService: EmailPrefilterService,
     private notificationsService: NotificationsService,
     private billingService: BillingService,
+    private storageService: StorageService,
   ) {
     const clientId = this.configService.get<string>('google.clientId');
     const clientSecret = this.configService.get<string>('google.clientSecret');
     const redirectUri = this.configService.get<string>('google.redirectUri');
 
     this.oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
-    
-    // For local development, store files in a local directory
-    this.uploadDir = path.join(process.cwd(), 'uploads', 'cvs');
-    this.ensureUploadDir();
-  }
-
-  private async ensureUploadDir() {
-    try {
-      await fs.mkdir(this.uploadDir, { recursive: true });
-    } catch (error) {
-      this.logger.error('Failed to create upload directory:', error);
-    }
   }
 
   /**
@@ -631,13 +618,19 @@ export class EmailMonitorService {
 
     const fileBuffer = Buffer.from(response.data.data, 'base64');
 
-    // Save file locally
-    const fileId = uuidv4();
-    const ext = path.extname(attachment.filename);
-    const savedFileName = `${fileId}${ext}`;
-    const filePath = path.join(this.uploadDir, savedFileName);
+    // Upload file to S3 (or local storage as fallback)
+    // Folder structure: {companyId}/cvs/{uuid}.{ext}
+    const uploadResult = await this.storageService.uploadFile(
+      fileBuffer,
+      attachment.filename,
+      attachment.mimeType,
+      companyId,
+      'cvs',
+    );
 
-    await fs.writeFile(filePath, fileBuffer);
+    this.logger.debug(
+      `Attachment uploaded: ${attachment.filename} -> ${uploadResult.key} (local: ${uploadResult.isLocal})`,
+    );
 
     // Extract text from CV
     const extraction = await this.fileProcessingService.extractText(
@@ -717,7 +710,7 @@ export class EmailMonitorService {
         portfolioUrl: parsedData.personalInfo?.portfolioUrl,
         source: 'EMAIL',
         status: 'NEW',
-        cvFileUrl: `/uploads/cvs/${savedFileName}`,
+        cvFileUrl: uploadResult.url, // S3 URL or local path
         cvFileName: attachment.filename,
         cvText: extraction.text,
         extractionConfidence: extraction.confidence,

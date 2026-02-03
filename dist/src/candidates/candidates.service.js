@@ -18,14 +18,17 @@ const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
 const queue_service_1 = require("../queue/queue.service");
 const ai_service_1 = require("../ai/ai.service");
+const storage_service_1 = require("../storage/storage.service");
 let CandidatesService = CandidatesService_1 = class CandidatesService {
     prisma;
     aiService;
+    storageService;
     queueService;
     logger = new common_1.Logger(CandidatesService_1.name);
-    constructor(prisma, aiService, queueService) {
+    constructor(prisma, aiService, storageService, queueService) {
         this.prisma = prisma;
         this.aiService = aiService;
+        this.storageService = storageService;
         this.queueService = queueService;
     }
     async create(dto, companyId) {
@@ -68,7 +71,7 @@ let CandidatesService = CandidatesService_1 = class CandidatesService {
                 job: { select: { id: true, title: true } },
             },
         });
-        return this.formatCandidateResponse(candidate);
+        return this.formatCandidateResponse(candidate, false);
     }
     async findAll(companyId, query) {
         const { status, source, jobId, minScore, maxScore, search, tag, sortBy = 'createdAt', sortOrder = 'desc', page = 1, limit = 50, } = query;
@@ -110,8 +113,9 @@ let CandidatesService = CandidatesService_1 = class CandidatesService {
             }),
             this.prisma.candidate.count({ where }),
         ]);
+        const formattedCandidates = await Promise.all(candidates.map((c) => this.formatCandidateResponse(c, false)));
         return {
-            data: candidates.map(this.formatCandidateResponse),
+            data: formattedCandidates,
             pagination: {
                 page,
                 limit,
@@ -142,8 +146,9 @@ let CandidatesService = CandidatesService_1 = class CandidatesService {
         if (!candidate) {
             throw new common_1.NotFoundException('Candidate not found');
         }
+        const formatted = await this.formatCandidateResponse(candidate, true);
         return {
-            ...this.formatCandidateResponse(candidate),
+            ...formatted,
             scores: candidate.scores,
             notes: candidate.notes,
             stageHistory: candidate.stageHistory,
@@ -195,7 +200,7 @@ let CandidatesService = CandidatesService_1 = class CandidatesService {
                 job: { select: { id: true, title: true } },
             },
         });
-        return this.formatCandidateResponse(candidate);
+        return this.formatCandidateResponse(candidate, false);
     }
     async remove(candidateId, companyId) {
         const existing = await this.prisma.candidate.findFirst({
@@ -460,7 +465,17 @@ let CandidatesService = CandidatesService_1 = class CandidatesService {
             score: scoreResult.overallScore,
         };
     }
-    formatCandidateResponse(candidate) {
+    async formatCandidateResponse(candidate, includeSignedUrl = false) {
+        let cvFileSignedUrl = null;
+        if (includeSignedUrl && candidate.cvFileUrl) {
+            try {
+                cvFileSignedUrl = await this.storageService.getSignedUrl(candidate.cvFileUrl, 3600);
+            }
+            catch (error) {
+                this.logger.warn(`Failed to generate signed URL for candidate ${candidate.id}: ${error}`);
+                cvFileSignedUrl = candidate.cvFileUrl;
+            }
+        }
         return {
             id: candidate.id,
             fullName: candidate.fullName,
@@ -473,6 +488,7 @@ let CandidatesService = CandidatesService_1 = class CandidatesService {
             source: candidate.source,
             status: candidate.status,
             cvFileUrl: candidate.cvFileUrl,
+            cvFileSignedUrl,
             cvFileName: candidate.cvFileName,
             overallScore: candidate.overallScore,
             aiSummary: candidate.aiSummary,
@@ -488,13 +504,27 @@ let CandidatesService = CandidatesService_1 = class CandidatesService {
             languages: candidate.languages,
         };
     }
+    async getCvSignedUrl(candidateId, companyId) {
+        const candidate = await this.prisma.candidate.findFirst({
+            where: { id: candidateId, companyId },
+            select: { cvFileUrl: true },
+        });
+        if (!candidate) {
+            throw new common_1.NotFoundException('Candidate not found');
+        }
+        if (!candidate.cvFileUrl) {
+            throw new common_1.BadRequestException('Candidate does not have a CV file');
+        }
+        return this.storageService.getSignedUrl(candidate.cvFileUrl, 3600);
+    }
 };
 exports.CandidatesService = CandidatesService;
 exports.CandidatesService = CandidatesService = CandidatesService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __param(2, (0, common_1.Optional)()),
+    __param(3, (0, common_1.Optional)()),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         ai_service_1.AiService,
+        storage_service_1.StorageService,
         queue_service_1.QueueService])
 ], CandidatesService);
 //# sourceMappingURL=candidates.service.js.map

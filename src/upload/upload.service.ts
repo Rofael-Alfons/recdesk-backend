@@ -1,13 +1,12 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { FileProcessingService } from '../file-processing/file-processing.service';
 import { AiService } from '../ai/ai.service';
 import { BillingService } from '../billing/billing.service';
+import { StorageService } from '../storage/storage.service';
 import { UsageType } from '@prisma/client';
-import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
-import * as fs from 'fs/promises';
 
 export interface UploadResult {
   fileName: string;
@@ -25,7 +24,7 @@ export interface BulkUploadResult {
 
 @Injectable()
 export class UploadService {
-  private uploadDir: string;
+  private readonly logger = new Logger(UploadService.name);
 
   constructor(
     private prisma: PrismaService,
@@ -33,20 +32,8 @@ export class UploadService {
     private aiService: AiService,
     private configService: ConfigService,
     private billingService: BillingService,
-  ) {
-    // For local development, store files in a local directory
-    // In production, this would be replaced with S3
-    this.uploadDir = path.join(process.cwd(), 'uploads', 'cvs');
-    this.ensureUploadDir();
-  }
-
-  private async ensureUploadDir() {
-    try {
-      await fs.mkdir(this.uploadDir, { recursive: true });
-    } catch (error) {
-      console.error('Failed to create upload directory:', error);
-    }
-  }
+    private storageService: StorageService,
+  ) {}
 
   async uploadBulkCVs(
     files: Express.Multer.File[],
@@ -115,13 +102,19 @@ export class UploadService {
         return { fileName, status: 'failed', error: validation.error };
       }
 
-      // Save file locally (in production, upload to S3)
-      const fileId = uuidv4();
-      const ext = path.extname(fileName);
-      const savedFileName = `${fileId}${ext}`;
-      const filePath = path.join(this.uploadDir, savedFileName);
+      // Upload file to S3 (or local storage as fallback)
+      // Folder structure: {companyId}/cvs/{uuid}.{ext}
+      const uploadResult = await this.storageService.uploadFile(
+        file.buffer,
+        fileName,
+        file.mimetype,
+        companyId,
+        'cvs',
+      );
 
-      await fs.writeFile(filePath, file.buffer);
+      this.logger.debug(
+        `File uploaded: ${fileName} -> ${uploadResult.key} (local: ${uploadResult.isLocal})`,
+      );
 
       // Extract text from CV
       const extraction = await this.fileProcessingService.extractText(
@@ -182,7 +175,7 @@ export class UploadService {
           portfolioUrl: parsedData.personalInfo?.portfolioUrl,
           source: 'UPLOAD',
           status: 'NEW',
-          cvFileUrl: `/uploads/cvs/${savedFileName}`, // Local path for now
+          cvFileUrl: uploadResult.url, // S3 URL or local path
           cvFileName: fileName,
           cvText: extraction.text,
           extractionConfidence: extraction.confidence,

@@ -1,3 +1,4 @@
+import { StorageService } from '../storage/storage.service';
 export interface TextExtractionResult {
     text: string;
     confidence: number;
@@ -5,8 +6,11 @@ export interface TextExtractionResult {
     error?: string;
 }
 export declare class FileProcessingService {
+    private storageService;
+    private readonly logger;
     private readonly supportedExtensions;
     private readonly maxFileSize;
+    constructor(storageService: StorageService);
     extractText(fileBuffer: Buffer, fileName: string): Promise<TextExtractionResult>;
     private extractFromPdf;
     private extractFromDocx;
@@ -16,5 +20,5 @@ export declare class FileProcessingService {
         error?: string;
     };
     getSupportedExtensions(): string[];
-    extractTextFromFile(filePath: string): Promise<TextExtractionResult>;
+    extractTextFromFile(filePathOrKey: string): Promise<TextExtractionResult>;
 }

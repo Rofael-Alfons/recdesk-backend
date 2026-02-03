@@ -44,10 +44,10 @@ export declare class JobsService {
         pipelineStages: {
             id: string;
             name: string;
+            jobId: string;
             orderIndex: number;
             color: string;
             isDefault: boolean;
-            jobId: string;
         }[];
         id: any;
         title: any;
