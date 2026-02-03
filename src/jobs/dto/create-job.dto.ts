@@ -17,7 +17,9 @@ export class CreateJobDto {
   @MaxLength(200)
   title: string;
 
-  @ApiPropertyOptional({ example: 'We are looking for an experienced backend developer...' })
+  @ApiPropertyOptional({
+    example: 'We are looking for an experienced backend developer...',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(10000)
@@ -28,14 +30,17 @@ export class CreateJobDto {
   @IsEnum(JobStatus)
   status?: JobStatus;
 
-  @ApiPropertyOptional({ enum: ExperienceLevel, default: ExperienceLevel.JUNIOR })
+  @ApiPropertyOptional({
+    enum: ExperienceLevel,
+    default: ExperienceLevel.JUNIOR,
+  })
   @IsOptional()
   @IsEnum(ExperienceLevel)
   experienceLevel?: ExperienceLevel;
 
   @ApiPropertyOptional({
     example: ['Node.js', 'TypeScript', 'PostgreSQL'],
-    description: 'Required skills for the position'
+    description: 'Required skills for the position',
   })
   @IsOptional()
   @IsArray()
@@ -44,7 +49,7 @@ export class CreateJobDto {
 
   @ApiPropertyOptional({
     example: ['Docker', 'AWS', 'GraphQL'],
-    description: 'Nice-to-have skills'
+    description: 'Nice-to-have skills',
   })
   @IsOptional()
   @IsArray()
@@ -52,8 +57,12 @@ export class CreateJobDto {
   preferredSkills?: string[];
 
   @ApiPropertyOptional({
-    example: { yearsOfExperience: 5, education: 'Bachelor in CS', languages: ['English'] },
-    description: 'Additional requirements as JSON'
+    example: {
+      yearsOfExperience: 5,
+      education: 'Bachelor in CS',
+      languages: ['English'],
+    },
+    description: 'Additional requirements as JSON',
   })
   @IsOptional()
   @IsObject()

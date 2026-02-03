@@ -6,25 +6,25 @@ export declare class EmailTemplatesController {
     constructor(emailTemplatesService: EmailTemplatesService);
     create(dto: CreateEmailTemplateDto, user: CurrentUserData): Promise<{
         id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
-        name: string;
         isDefault: boolean;
-        type: import("@prisma/client").$Enums.EmailTemplateType;
-        body: string;
         subject: string;
+        body: string;
+        type: import("@prisma/client").$Enums.EmailTemplateType;
     }>;
     findAll(query: QueryEmailTemplatesDto, user: CurrentUserData): Promise<{
         id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
-        name: string;
         isDefault: boolean;
-        type: import("@prisma/client").$Enums.EmailTemplateType;
-        body: string;
         subject: string;
+        body: string;
+        type: import("@prisma/client").$Enums.EmailTemplateType;
     }[]>;
     getTokens(): Promise<{
         token: string;
@@ -32,25 +32,25 @@ export declare class EmailTemplatesController {
     }[]>;
     findOne(id: string, user: CurrentUserData): Promise<{
         id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
-        name: string;
         isDefault: boolean;
-        type: import("@prisma/client").$Enums.EmailTemplateType;
-        body: string;
         subject: string;
+        body: string;
+        type: import("@prisma/client").$Enums.EmailTemplateType;
     }>;
     update(id: string, dto: UpdateEmailTemplateDto, user: CurrentUserData): Promise<{
         id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
-        name: string;
         isDefault: boolean;
-        type: import("@prisma/client").$Enums.EmailTemplateType;
-        body: string;
         subject: string;
+        body: string;
+        type: import("@prisma/client").$Enums.EmailTemplateType;
     }>;
     remove(id: string, user: CurrentUserData): Promise<{
         message: string;

@@ -161,7 +161,9 @@ let IntegrationsService = class IntegrationsService {
                 where: { id: connectionId },
                 data: {
                     accessToken: credentials.access_token,
-                    expiresAt: credentials.expiry_date ? new Date(credentials.expiry_date) : null,
+                    expiresAt: credentials.expiry_date
+                        ? new Date(credentials.expiry_date)
+                        : null,
                 },
             });
             return credentials.access_token;

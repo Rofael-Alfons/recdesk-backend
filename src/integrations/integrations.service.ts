@@ -21,11 +21,17 @@ export class IntegrationsService {
     const clientSecret = this.configService.get<string>('google.clientSecret');
     const redirectUri = this.configService.get<string>('google.redirectUri');
 
-    this.oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+    this.oauth2Client = new google.auth.OAuth2(
+      clientId,
+      clientSecret,
+      redirectUri,
+    );
   }
 
   async getGmailAuthUrl(companyId: string, userId: string) {
-    const state = Buffer.from(JSON.stringify({ companyId, userId })).toString('base64');
+    const state = Buffer.from(JSON.stringify({ companyId, userId })).toString(
+      'base64',
+    );
 
     const scopes = [
       'https://www.googleapis.com/auth/gmail.readonly',
@@ -94,7 +100,8 @@ export class IntegrationsService {
           where: { id: existingConnection.id },
           data: {
             accessToken: tokens.access_token,
-            refreshToken: tokens.refresh_token || existingConnection.refreshToken,
+            refreshToken:
+              tokens.refresh_token || existingConnection.refreshToken,
             expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
             isActive: true,
           },
@@ -175,7 +182,9 @@ export class IntegrationsService {
     });
 
     if (!connection || !connection.refreshToken) {
-      throw new BadRequestException('Cannot refresh token - no refresh token available');
+      throw new BadRequestException(
+        'Cannot refresh token - no refresh token available',
+      );
     }
 
     try {
@@ -189,7 +198,9 @@ export class IntegrationsService {
         where: { id: connectionId },
         data: {
           accessToken: credentials.access_token!,
-          expiresAt: credentials.expiry_date ? new Date(credentials.expiry_date) : null,
+          expiresAt: credentials.expiry_date
+            ? new Date(credentials.expiry_date)
+            : null,
         },
       });
 
@@ -203,7 +214,9 @@ export class IntegrationsService {
         data: { isActive: false },
       });
 
-      throw new BadRequestException('Failed to refresh token - please reconnect');
+      throw new BadRequestException(
+        'Failed to refresh token - please reconnect',
+      );
     }
   }
 
@@ -217,7 +230,8 @@ export class IntegrationsService {
     }
 
     // Check if token is expired or about to expire (5 min buffer)
-    const isExpired = connection.expiresAt &&
+    const isExpired =
+      connection.expiresAt &&
       new Date(connection.expiresAt).getTime() < Date.now() + 5 * 60 * 1000;
 
     if (isExpired && connection.refreshToken) {

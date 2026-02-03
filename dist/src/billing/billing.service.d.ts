@@ -68,18 +68,18 @@ export declare class BillingService {
         message?: string;
     }>;
     getInvoices(companyId: string): Promise<{
-        id: string;
-        createdAt: Date;
-        companyId: string;
         status: import("@prisma/client").$Enums.InvoiceStatus;
-        periodStart: Date;
-        periodEnd: Date;
+        createdAt: Date;
+        id: string;
+        companyId: string;
         stripeInvoiceId: string;
         amountDue: number;
         amountPaid: number;
         currency: string;
         invoicePdf: string | null;
         hostedInvoiceUrl: string | null;
+        periodStart: Date;
+        periodEnd: Date;
         paidAt: Date | null;
     }[]>;
     createTrialSubscription(companyId: string): Promise<void>;

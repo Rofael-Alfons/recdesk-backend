@@ -11,7 +11,7 @@ export class EmailMonitorScheduler {
   constructor(
     private emailMonitorService: EmailMonitorService,
     private prisma: PrismaService,
-  ) { }
+  ) {}
 
   /**
    * Poll email connections every 5 minutes
@@ -94,7 +94,9 @@ export class EmailMonitorScheduler {
         },
       });
 
-      this.logger.log(`Found ${expiringConnections.length} connections needing token refresh`);
+      this.logger.log(
+        `Found ${expiringConnections.length} connections needing token refresh`,
+      );
 
       for (const connection of expiringConnections) {
         try {

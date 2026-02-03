@@ -168,10 +168,13 @@ let UsersService = class UsersService {
         if (!isSelfUpdate && requestingUserRole !== client_1.UserRole.ADMIN) {
             throw new common_1.ForbiddenException('Only admins can update other users');
         }
-        if ((dto.role || dto.isActive !== undefined) && requestingUserRole !== client_1.UserRole.ADMIN) {
+        if ((dto.role || dto.isActive !== undefined) &&
+            requestingUserRole !== client_1.UserRole.ADMIN) {
             throw new common_1.ForbiddenException('Only admins can change role or activation status');
         }
-        if (dto.role && dto.role !== client_1.UserRole.ADMIN && targetUser.role === client_1.UserRole.ADMIN) {
+        if (dto.role &&
+            dto.role !== client_1.UserRole.ADMIN &&
+            targetUser.role === client_1.UserRole.ADMIN) {
             const adminCount = await this.prisma.user.count({
                 where: {
                     companyId,

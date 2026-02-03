@@ -1,5 +1,10 @@
 import { Controller, Get } from '@nestjs/common';
-import { HealthCheckService, HealthCheck, MemoryHealthIndicator, DiskHealthIndicator } from '@nestjs/terminus';
+import {
+  HealthCheckService,
+  HealthCheck,
+  MemoryHealthIndicator,
+  DiskHealthIndicator,
+} from '@nestjs/terminus';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Public } from '../common/decorators/public.decorator';
 import { PrismaHealthIndicator } from './prisma.health';
@@ -14,7 +19,7 @@ export class HealthController {
     private redis: RedisHealthIndicator,
     private memory: MemoryHealthIndicator,
     private disk: DiskHealthIndicator,
-  ) { }
+  ) {}
 
   @Get()
   @Public()
@@ -40,7 +45,9 @@ export class HealthController {
   @Get('ready')
   @Public()
   @HealthCheck()
-  @ApiOperation({ summary: 'Readiness probe - is the service ready to accept traffic?' })
+  @ApiOperation({
+    summary: 'Readiness probe - is the service ready to accept traffic?',
+  })
   readiness() {
     // Readiness check - verifies database and Redis connections
     return this.health.check([

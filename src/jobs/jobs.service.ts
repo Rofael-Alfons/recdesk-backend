@@ -118,7 +118,7 @@ export class JobsService {
     }
 
     // Check if requirements are changing
-    const requirementsChanged = 
+    const requirementsChanged =
       dto.requiredSkills !== undefined ||
       dto.preferredSkills !== undefined ||
       dto.experienceLevel !== undefined ||

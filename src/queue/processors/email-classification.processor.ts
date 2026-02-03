@@ -19,7 +19,14 @@ export class EmailClassificationProcessor {
 
   @Process('classify-email')
   async classifyEmail(job: Job<EmailClassificationJobData>) {
-    const { emailConnectionId, messageId, subject, senderEmail, senderName, bodyText } = job.data;
+    const {
+      emailConnectionId,
+      messageId,
+      subject,
+      senderEmail,
+      senderName,
+      bodyText,
+    } = job.data;
 
     this.logger.log(`Classifying email ${messageId}`);
 
@@ -87,10 +94,10 @@ export class EmailClassificationProcessor {
 
         // TODO: Extract attachments and create candidate
         // This will be implemented when S3 integration is complete
-        
+
         await this.prisma.emailImport.update({
           where: { id: emailImport.id },
-          data: { 
+          data: {
             status: 'IMPORTED',
             processedAt: new Date(),
           },
@@ -98,7 +105,7 @@ export class EmailClassificationProcessor {
       } else if (!classification.isJobApplication) {
         await this.prisma.emailImport.update({
           where: { id: emailImport.id },
-          data: { 
+          data: {
             status: 'SKIPPED',
             processedAt: new Date(),
           },

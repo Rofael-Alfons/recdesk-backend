@@ -138,7 +138,10 @@ export class UploadService {
         parsedData = await this.aiService.parseCV(extraction.text, fileName);
         aiSummary = parsedData.summary || null;
         // Track AI parsing usage
-        await this.billingService.trackUsage(companyId, UsageType.AI_PARSING_CALL);
+        await this.billingService.trackUsage(
+          companyId,
+          UsageType.AI_PARSING_CALL,
+        );
       } catch (error) {
         console.error('AI parsing error:', error);
         // Continue with basic data extraction from filename
@@ -166,7 +169,9 @@ export class UploadService {
       // Create candidate record
       const candidate = await this.prisma.candidate.create({
         data: {
-          fullName: parsedData.personalInfo?.fullName || this.extractNameFromFilename(fileName),
+          fullName:
+            parsedData.personalInfo?.fullName ||
+            this.extractNameFromFilename(fileName),
           email: parsedData.personalInfo?.email?.toLowerCase(),
           phone: parsedData.personalInfo?.phone,
           location: parsedData.personalInfo?.location,
@@ -214,7 +219,11 @@ export class UploadService {
     }
   }
 
-  private async scoreCandidate(candidateId: string, jobId: string, companyId: string) {
+  private async scoreCandidate(
+    candidateId: string,
+    jobId: string,
+    companyId: string,
+  ) {
     try {
       const candidate = await this.prisma.candidate.findUnique({
         where: { id: candidateId },
@@ -236,12 +245,12 @@ export class UploadService {
           githubUrl: candidate.githubUrl,
           portfolioUrl: candidate.portfolioUrl,
         },
-        education: candidate.education as any[] || [],
-        experience: candidate.experience as any[] || [],
-        skills: candidate.skills as any || [],
-        projects: candidate.projects as any[] || [],
-        certifications: candidate.certifications as any[] || [],
-        languages: candidate.languages as any[] || [],
+        education: (candidate.education as any[]) || [],
+        experience: (candidate.experience as any[]) || [],
+        skills: (candidate.skills as any) || [],
+        projects: (candidate.projects as any[]) || [],
+        certifications: (candidate.certifications as any[]) || [],
+        languages: (candidate.languages as any[]) || [],
         summary: candidate.aiSummary,
       };
 
@@ -250,11 +259,14 @@ export class UploadService {
         requiredSkills: job.requiredSkills,
         preferredSkills: job.preferredSkills,
         experienceLevel: job.experienceLevel,
-        requirements: job.requirements as Record<string, any> || {},
+        requirements: (job.requirements as Record<string, any>) || {},
       });
 
       // Track AI scoring usage
-      await this.billingService.trackUsage(companyId, UsageType.AI_SCORING_CALL);
+      await this.billingService.trackUsage(
+        companyId,
+        UsageType.AI_SCORING_CALL,
+      );
 
       // Save score
       await this.prisma.candidateScore.create({
@@ -296,11 +308,15 @@ export class UploadService {
       .trim();
 
     // Capitalize words
-    return name
-      .split(' ')
-      .filter(Boolean)
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ') || 'Unknown Candidate';
+    return (
+      name
+        .split(' ')
+        .filter(Boolean)
+        .map(
+          (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
+        )
+        .join(' ') || 'Unknown Candidate'
+    );
   }
 
   private extractBasicDataFromFilename(fileName: string) {

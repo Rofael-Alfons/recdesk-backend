@@ -9,7 +9,13 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
-import { RegisterDto, LoginDto, RefreshTokenDto, ForgotPasswordDto, ResetPasswordDto } from './dto';
+import {
+  RegisterDto,
+  LoginDto,
+  RefreshTokenDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+} from './dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import * as crypto from 'crypto';
 
@@ -32,7 +38,8 @@ export class AuthService {
     }
 
     // Hash password
-    const saltRounds = this.configService.get<number>('bcrypt.saltRounds') || 12;
+    const saltRounds =
+      this.configService.get<number>('bcrypt.saltRounds') || 12;
     const passwordHash = await bcrypt.hash(dto.password, saltRounds);
 
     // Create company and user in a transaction
@@ -97,7 +104,10 @@ export class AuthService {
       throw new UnauthorizedException('Account is deactivated');
     }
 
-    const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
+    const isPasswordValid = await bcrypt.compare(
+      dto.password,
+      user.passwordHash,
+    );
 
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
@@ -177,7 +187,12 @@ export class AuthService {
     });
   }
 
-  private async generateTokens(user: { id: string; email: string; companyId: string; role: string }) {
+  private async generateTokens(user: {
+    id: string;
+    email: string;
+    companyId: string;
+    role: string;
+  }) {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
@@ -185,14 +200,16 @@ export class AuthService {
       role: user.role,
     };
 
-    const accessExpirationSeconds = this.configService.get<number>('jwt.accessExpirationSeconds') || 900;
+    const accessExpirationSeconds =
+      this.configService.get<number>('jwt.accessExpirationSeconds') || 900;
     const accessToken = this.jwtService.sign(payload, {
       expiresIn: accessExpirationSeconds,
     });
 
     // Generate refresh token
     const refreshToken = uuidv4();
-    const refreshExpirationSeconds = this.configService.get<number>('jwt.refreshExpirationSeconds') || 604800;
+    const refreshExpirationSeconds =
+      this.configService.get<number>('jwt.refreshExpirationSeconds') || 604800;
     const expiresAt = new Date(Date.now() + refreshExpirationSeconds * 1000);
 
     await this.prisma.refreshToken.create({
@@ -217,7 +234,8 @@ export class AuthService {
     // Always return success to prevent email enumeration
     if (!user || !user.isActive) {
       return {
-        message: 'If an account exists with this email, a password reset link has been sent.',
+        message:
+          'If an account exists with this email, a password reset link has been sent.',
       };
     }
 
@@ -241,13 +259,15 @@ export class AuthService {
 
     // TODO: Send email with reset link
     // For now, log the token (in production, this would be sent via email only)
-    const frontendUrl = this.configService.get<string>('frontend.url') || 'http://localhost:3000';
+    const frontendUrl =
+      this.configService.get<string>('frontend.url') || 'http://localhost:3000';
     const resetLink = `${frontendUrl}/auth/reset-password?token=${token}`;
 
     console.log(`[DEV] Password reset link for ${user.email}: ${resetLink}`);
 
     return {
-      message: 'If an account exists with this email, a password reset link has been sent.',
+      message:
+        'If an account exists with this email, a password reset link has been sent.',
       // Only include in development
       ...(process.env.NODE_ENV !== 'production' && { resetLink }),
     };
@@ -276,7 +296,8 @@ export class AuthService {
     }
 
     // Hash new password
-    const saltRounds = this.configService.get<number>('bcrypt.saltRounds') || 12;
+    const saltRounds =
+      this.configService.get<number>('bcrypt.saltRounds') || 12;
     const passwordHash = await bcrypt.hash(dto.newPassword, saltRounds);
 
     // Update password and mark token as used in a transaction
@@ -298,8 +319,8 @@ export class AuthService {
     });
 
     return {
-      message: 'Password has been reset successfully. Please login with your new password.',
+      message:
+        'Password has been reset successfully. Please login with your new password.',
     };
   }
-
 }

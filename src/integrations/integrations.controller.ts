@@ -32,7 +32,7 @@ export class IntegrationsController {
   constructor(
     private integrationsService: IntegrationsService,
     private configService: ConfigService,
-  ) { }
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'List all email connections' })
@@ -59,10 +59,13 @@ export class IntegrationsController {
     @Query('error') error: string,
     @Res() res: Response,
   ) {
-    const frontendUrl = this.configService.get<string>('frontend.url') || 'http://localhost:3000';
+    const frontendUrl =
+      this.configService.get<string>('frontend.url') || 'http://localhost:3000';
 
     if (error) {
-      return res.redirect(`${frontendUrl}/integrations?error=${encodeURIComponent(error)}`);
+      return res.redirect(
+        `${frontendUrl}/integrations?error=${encodeURIComponent(error)}`,
+      );
     }
 
     if (!code || !state) {
@@ -70,13 +73,18 @@ export class IntegrationsController {
     }
 
     try {
-      const result = await this.integrationsService.handleGmailCallback(code, state);
+      const result = await this.integrationsService.handleGmailCallback(
+        code,
+        state,
+      );
       return res.redirect(
         `${frontendUrl}/integrations?success=true&email=${encodeURIComponent(result.email)}`,
       );
     } catch (err) {
       console.error('Gmail callback error:', err);
-      return res.redirect(`${frontendUrl}/integrations?error=connection_failed`);
+      return res.redirect(
+        `${frontendUrl}/integrations?error=connection_failed`,
+      );
     }
   }
 
@@ -90,7 +98,11 @@ export class IntegrationsController {
     @Body() updateDto: UpdateConnectionDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.integrationsService.updateConnection(id, user.companyId, updateDto);
+    return this.integrationsService.updateConnection(
+      id,
+      user.companyId,
+      updateDto,
+    );
   }
 
   @Delete(':id')

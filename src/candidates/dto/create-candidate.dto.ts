@@ -49,7 +49,10 @@ export class CreateCandidateDto {
   @IsUrl()
   portfolioUrl?: string;
 
-  @ApiPropertyOptional({ enum: CandidateSource, default: CandidateSource.MANUAL })
+  @ApiPropertyOptional({
+    enum: CandidateSource,
+    default: CandidateSource.MANUAL,
+  })
   @IsOptional()
   @IsEnum(CandidateSource)
   source?: CandidateSource;

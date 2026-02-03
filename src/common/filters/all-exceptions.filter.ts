@@ -25,7 +25,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
   constructor(
     @InjectPinoLogger(AllExceptionsFilter.name)
     private readonly logger: PinoLogger,
-  ) { }
+  ) {}
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -53,7 +53,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message = responseObj.message || exception.message;
         error = responseObj.error || HttpStatus[statusCode] || 'Error';
       } else {
-        message = exceptionResponse as string;
+        message = exceptionResponse;
         error = HttpStatus[statusCode] || 'Error';
       }
     } else if (exception instanceof Error) {
@@ -96,9 +96,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
     };
 
     if (statusCode >= 500) {
-      this.logger.error(logContext, `${request.method} ${request.url} - ${statusCode}`);
+      this.logger.error(
+        logContext,
+        `${request.method} ${request.url} - ${statusCode}`,
+      );
     } else if (statusCode >= 400) {
-      this.logger.warn(logContext, `${request.method} ${request.url} - ${statusCode}`);
+      this.logger.warn(
+        logContext,
+        `${request.method} ${request.url} - ${statusCode}`,
+      );
     }
 
     const errorResponse: ErrorResponse = {

@@ -66,7 +66,9 @@ export class EmailPrefilterService {
     if (this.autoClassifyEnabled) {
       const autoClassifyResult = this.checkJobApplicationPatterns(email);
       if (autoClassifyResult) {
-        this.logger.debug(`Email auto-classified: ${autoClassifyResult.reason}`);
+        this.logger.debug(
+          `Email auto-classified: ${autoClassifyResult.reason}`,
+        );
         return autoClassifyResult;
       }
     }
@@ -82,7 +84,14 @@ export class EmailPrefilterService {
    * Check if email matches skip patterns (NOT a job application)
    */
   private checkSkipPatterns(email: EmailData): PrefilterResult | null {
-    const { subject, senderEmail, bodyText, bodyHtml, attachments, companyDomain } = email;
+    const {
+      subject,
+      senderEmail,
+      bodyText,
+      bodyHtml,
+      attachments,
+      companyDomain,
+    } = email;
     const body = bodyText || bodyHtml || '';
 
     // Check auto-reply patterns in subject
@@ -106,7 +115,10 @@ export class EmailPrefilterService {
     }
 
     // Check if sender is from the same company (internal email)
-    if (companyDomain && senderEmail.toLowerCase().endsWith(`@${companyDomain.toLowerCase()}`)) {
+    if (
+      companyDomain &&
+      senderEmail.toLowerCase().endsWith(`@${companyDomain.toLowerCase()}`)
+    ) {
       return {
         action: 'skip',
         reason: `Internal email from company domain: ${companyDomain}`,
@@ -149,7 +161,7 @@ export class EmailPrefilterService {
     // Check if no attachments AND no job-related keywords
     const hasCvAttachment = this.hasCvAttachment(attachments);
     const hasJobKeywords = this.hasJobKeywords(subject, body);
-    
+
     if (!hasCvAttachment && !hasJobKeywords) {
       return {
         action: 'skip',
@@ -163,12 +175,14 @@ export class EmailPrefilterService {
   /**
    * Check if email matches job application patterns (high confidence)
    */
-  private checkJobApplicationPatterns(email: EmailData): PrefilterResult | null {
+  private checkJobApplicationPatterns(
+    email: EmailData,
+  ): PrefilterResult | null {
     const { subject, bodyText, bodyHtml, attachments } = email;
     const body = bodyText || bodyHtml || '';
 
     const hasCvAttachment = this.hasCvAttachment(attachments);
-    
+
     // Strong signal: CV attachment + job application subject
     if (hasCvAttachment) {
       for (const pattern of JOB_APPLICATION_PATTERNS.subjectPatterns) {
@@ -227,7 +241,9 @@ export class EmailPrefilterService {
     attachments: Array<{ filename: string; mimeType: string }>,
   ): boolean {
     return attachments.some((att) => {
-      const ext = att.filename.toLowerCase().slice(att.filename.lastIndexOf('.'));
+      const ext = att.filename
+        .toLowerCase()
+        .slice(att.filename.lastIndexOf('.'));
       return (
         CV_FILE_EXTENSIONS.includes(ext) || CV_MIME_TYPES.includes(att.mimeType)
       );
@@ -239,12 +255,23 @@ export class EmailPrefilterService {
    */
   private hasJobKeywords(subject: string, body: string): boolean {
     const text = `${subject} ${body}`.toLowerCase();
-    
+
     const jobKeywords = [
-      'job', 'position', 'role', 'vacancy', 'opening',
-      'application', 'applying', 'apply', 'candidate',
-      'cv', 'resume', 'curriculum vitae',
-      'hiring', 'recruitment', 'opportunity',
+      'job',
+      'position',
+      'role',
+      'vacancy',
+      'opening',
+      'application',
+      'applying',
+      'apply',
+      'candidate',
+      'cv',
+      'resume',
+      'curriculum vitae',
+      'hiring',
+      'recruitment',
+      'opportunity',
     ];
 
     return jobKeywords.some((keyword) => text.includes(keyword));
@@ -255,7 +282,7 @@ export class EmailPrefilterService {
    */
   private extractPosition(subject: string, body: string): string | null {
     const text = `${subject} ${body}`;
-    
+
     // Common patterns for position extraction
     const positionPatterns = [
       /(?:application|applying|apply)\s+(?:for|to)\s+(?:the\s+)?(?:position\s+(?:of\s+)?)?([^.,\n]+)/i,

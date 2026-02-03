@@ -83,7 +83,10 @@ export class TemplateEngineService {
   /**
    * Validate that all tokens in a template are supported
    */
-  validateTokens(template: string): { valid: boolean; unsupportedTokens: string[] } {
+  validateTokens(template: string): {
+    valid: boolean;
+    unsupportedTokens: string[];
+  } {
     const supportedTokens = [
       '{{candidate_name}}',
       '{{candidate_first_name}}',

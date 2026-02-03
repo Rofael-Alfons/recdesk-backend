@@ -17,7 +17,9 @@ class UpdateConnectionDto {
 }
 exports.UpdateConnectionDto = UpdateConnectionDto;
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Enable/disable auto-import of job applications' }),
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Enable/disable auto-import of job applications',
+    }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)

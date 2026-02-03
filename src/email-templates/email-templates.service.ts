@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateEmailTemplateDto,
@@ -46,11 +42,7 @@ export class EmailTemplatesService {
         companyId,
         ...(query.type && { type: query.type }),
       },
-      orderBy: [
-        { isDefault: 'desc' },
-        { type: 'asc' },
-        { name: 'asc' },
-      ],
+      orderBy: [{ isDefault: 'desc' }, { type: 'asc' }, { name: 'asc' }],
     });
 
     return templates;
@@ -89,8 +81,8 @@ export class EmailTemplatesService {
     const typeToCheck = dto.type || existing.type;
     if (dto.isDefault) {
       await this.prisma.emailTemplate.updateMany({
-        where: { 
-          type: typeToCheck, 
+        where: {
+          type: typeToCheck,
           isDefault: true,
           companyId,
           id: { not: id },
@@ -276,13 +268,15 @@ Best regards,
         });
       }
 
-      await this.prisma.emailTemplate.create({ 
-        data: { ...template, companyId } 
+      await this.prisma.emailTemplate.create({
+        data: { ...template, companyId },
       });
       created++;
     }
 
-    this.logger.log(`Seeded email templates for company ${companyId}: ${created} created, ${skipped} skipped`);
+    this.logger.log(
+      `Seeded email templates for company ${companyId}: ${created} created, ${skipped} skipped`,
+    );
 
     return {
       message: `Successfully seeded email templates`,
@@ -296,12 +290,24 @@ Best regards,
    */
   getAvailableTokens() {
     return [
-      { token: '{{candidate_name}}', description: 'Full name of the candidate' },
-      { token: '{{candidate_first_name}}', description: 'First name of the candidate' },
-      { token: '{{candidate_email}}', description: 'Email address of the candidate' },
+      {
+        token: '{{candidate_name}}',
+        description: 'Full name of the candidate',
+      },
+      {
+        token: '{{candidate_first_name}}',
+        description: 'First name of the candidate',
+      },
+      {
+        token: '{{candidate_email}}',
+        description: 'Email address of the candidate',
+      },
       { token: '{{job_title}}', description: 'Title of the job position' },
       { token: '{{company_name}}', description: 'Name of your company' },
-      { token: '{{sender_name}}', description: 'Full name of the person sending the email' },
+      {
+        token: '{{sender_name}}',
+        description: 'Full name of the person sending the email',
+      },
     ];
   }
 }

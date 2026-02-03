@@ -35,7 +35,9 @@ __decorate([
     __metadata("design:type", String)
 ], BulkSendEmailDto.prototype, "templateId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Override subject line for all emails (optional)' }),
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Override subject line for all emails (optional)',
+    }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)

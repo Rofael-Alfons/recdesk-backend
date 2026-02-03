@@ -83,24 +83,38 @@ export class AiService {
   private model: string;
 
   constructor(private configService: ConfigService) {
-    this.provider = this.configService.get<string>('ai.provider', 'groq') as AiProvider;
+    this.provider = this.configService.get<string>(
+      'ai.provider',
+      'groq',
+    ) as AiProvider;
 
     if (this.provider === 'groq') {
       const groqApiKey = this.configService.get<string>('groq.apiKey');
       if (!groqApiKey) {
-        console.warn('Groq API key not configured - AI features will be disabled');
+        console.warn(
+          'Groq API key not configured - AI features will be disabled',
+        );
       }
       this.groq = new Groq({ apiKey: groqApiKey || 'dummy-key' });
-      this.model = this.configService.get<string>('groq.model', 'llama-3.3-70b-versatile');
-      console.log(`AI Service initialized with Groq provider (model: ${this.model})`);
+      this.model = this.configService.get<string>(
+        'groq.model',
+        'llama-3.3-70b-versatile',
+      );
+      console.log(
+        `AI Service initialized with Groq provider (model: ${this.model})`,
+      );
     } else {
       const openaiApiKey = this.configService.get<string>('openai.apiKey');
       if (!openaiApiKey) {
-        console.warn('OpenAI API key not configured - AI features will be disabled');
+        console.warn(
+          'OpenAI API key not configured - AI features will be disabled',
+        );
       }
       this.openai = new OpenAI({ apiKey: openaiApiKey || 'dummy-key' });
       this.model = 'gpt-4-turbo-preview';
-      console.log(`AI Service initialized with OpenAI provider (model: ${this.model})`);
+      console.log(
+        `AI Service initialized with OpenAI provider (model: ${this.model})`,
+      );
     }
   }
 
@@ -209,7 +223,10 @@ Only respond with valid JSON, no additional text.`;
     }
   }
 
-  async parseCV(cvText: string, fileName: string | null): Promise<ParsedCVData> {
+  async parseCV(
+    cvText: string,
+    fileName: string | null,
+  ): Promise<ParsedCVData> {
     const prompt = `Parse this CV/resume and extract structured information.
 
 CV Text:

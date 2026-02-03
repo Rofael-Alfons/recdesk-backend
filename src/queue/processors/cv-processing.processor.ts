@@ -1,4 +1,10 @@
-import { Processor, Process, OnQueueActive, OnQueueCompleted, OnQueueFailed } from '@nestjs/bull';
+import {
+  Processor,
+  Process,
+  OnQueueActive,
+  OnQueueCompleted,
+  OnQueueFailed,
+} from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import type { Job } from 'bull';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -20,7 +26,7 @@ export class CvProcessingProcessor {
     private fileProcessingService: FileProcessingService,
     private notificationsService: NotificationsService,
     private billingService: BillingService,
-  ) { }
+  ) {}
 
   @Process('process-cv')
   async processCv(job: Job<CvProcessingJobData>) {
@@ -44,9 +50,10 @@ export class CvProcessingProcessor {
       if (!cvText && candidate.cvFileUrl) {
         this.logger.log(`Extracting text from CV: ${candidate.cvFileName}`);
 
-        const extractionResult = await this.fileProcessingService.extractTextFromFile(
-          candidate.cvFileUrl,
-        );
+        const extractionResult =
+          await this.fileProcessingService.extractTextFromFile(
+            candidate.cvFileUrl,
+          );
 
         cvText = extractionResult.text;
 
@@ -62,10 +69,16 @@ export class CvProcessingProcessor {
       // Parse CV with AI
       if (cvText) {
         this.logger.log(`Parsing CV with AI for candidate ${candidateId}`);
-        const parsed = await this.aiService.parseCV(cvText, candidate.cvFileName || null);
-        
+        const parsed = await this.aiService.parseCV(
+          cvText,
+          candidate.cvFileName || null,
+        );
+
         // Track AI parsing usage
-        await this.billingService.trackUsage(candidate.companyId, UsageType.AI_PARSING_CALL);
+        await this.billingService.trackUsage(
+          candidate.companyId,
+          UsageType.AI_PARSING_CALL,
+        );
 
         await this.prisma.candidate.update({
           where: { id: candidateId },
@@ -74,7 +87,8 @@ export class CvProcessingProcessor {
             email: parsed.personalInfo?.email || candidate.email,
             phone: parsed.personalInfo?.phone || candidate.phone,
             location: parsed.personalInfo?.location || candidate.location,
-            linkedinUrl: parsed.personalInfo?.linkedinUrl || candidate.linkedinUrl,
+            linkedinUrl:
+              parsed.personalInfo?.linkedinUrl || candidate.linkedinUrl,
             githubUrl: parsed.personalInfo?.githubUrl || candidate.githubUrl,
             education: parsed.education || undefined,
             experience: parsed.experience || undefined,
@@ -89,19 +103,34 @@ export class CvProcessingProcessor {
         // Score candidate if job is assigned
         const targetJobId = jobId || candidate.jobId;
         if (targetJobId) {
-          this.logger.log(`Scoring candidate ${candidateId} for job ${targetJobId}`);
-          await this.scoreCandidate(candidateId, targetJobId, parsed, candidate.companyId);
+          this.logger.log(
+            `Scoring candidate ${candidateId} for job ${targetJobId}`,
+          );
+          await this.scoreCandidate(
+            candidateId,
+            targetJobId,
+            parsed,
+            candidate.companyId,
+          );
         }
       }
 
       return { success: true, candidateId };
     } catch (error) {
-      this.logger.error(`Failed to process CV for candidate ${candidateId}:`, error);
+      this.logger.error(
+        `Failed to process CV for candidate ${candidateId}:`,
+        error,
+      );
       throw error;
     }
   }
 
-  private async scoreCandidate(candidateId: string, jobId: string, parsedData: any, companyId: string) {
+  private async scoreCandidate(
+    candidateId: string,
+    jobId: string,
+    parsedData: any,
+    companyId: string,
+  ) {
     const job = await this.prisma.job.findUnique({
       where: { id: jobId },
     });
@@ -119,8 +148,11 @@ export class CvProcessingProcessor {
       requirements: (job.requirements as Record<string, any>) || {},
     };
 
-    const scoreResult = await this.aiService.scoreCandidate(parsedData, requirements);
-    
+    const scoreResult = await this.aiService.scoreCandidate(
+      parsedData,
+      requirements,
+    );
+
     // Track AI scoring usage
     await this.billingService.trackUsage(companyId, UsageType.AI_SCORING_CALL);
 
@@ -169,12 +201,16 @@ export class CvProcessingProcessor {
 
   @OnQueueActive()
   onActive(job: Job<CvProcessingJobData>) {
-    this.logger.log(`Processing job ${job.id} for candidate ${job.data.candidateId}`);
+    this.logger.log(
+      `Processing job ${job.id} for candidate ${job.data.candidateId}`,
+    );
   }
 
   @OnQueueCompleted()
   async onCompleted(job: Job<CvProcessingJobData>) {
-    this.logger.log(`Completed job ${job.id} for candidate ${job.data.candidateId}`);
+    this.logger.log(
+      `Completed job ${job.id} for candidate ${job.data.candidateId}`,
+    );
 
     // Get candidate to find companyId and name
     const candidate = await this.prisma.candidate.findUnique({
@@ -184,8 +220,11 @@ export class CvProcessingProcessor {
 
     if (candidate) {
       // Track CV processed usage
-      await this.billingService.trackUsage(candidate.companyId, UsageType.CV_PROCESSED);
-      
+      await this.billingService.trackUsage(
+        candidate.companyId,
+        UsageType.CV_PROCESSED,
+      );
+
       // Create notification for CV processing completion
       await this.notificationsService.createNotification({
         type: NotificationType.CV_PROCESSING_COMPLETE,
@@ -196,7 +235,9 @@ export class CvProcessingProcessor {
       });
 
       // Check usage limits and send notifications if thresholds crossed
-      await this.notificationsService.checkAndNotifyUsageLimits(candidate.companyId);
+      await this.notificationsService.checkAndNotifyUsageLimits(
+        candidate.companyId,
+      );
     }
   }
 

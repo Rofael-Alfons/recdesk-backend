@@ -20,10 +20,7 @@ let BillingModule = class BillingModule {
 exports.BillingModule = BillingModule;
 exports.BillingModule = BillingModule = __decorate([
     (0, common_1.Module)({
-        imports: [
-            prisma_module_1.PrismaModule,
-            schedule_1.ScheduleModule.forRoot(),
-        ],
+        imports: [prisma_module_1.PrismaModule, schedule_1.ScheduleModule.forRoot()],
         controllers: [billing_controller_1.BillingController, webhooks_controller_1.WebhooksController],
         providers: [billing_service_1.BillingService, billing_scheduler_1.BillingScheduler, subscription_guard_1.SubscriptionGuard],
         exports: [billing_service_1.BillingService, subscription_guard_1.SubscriptionGuard],

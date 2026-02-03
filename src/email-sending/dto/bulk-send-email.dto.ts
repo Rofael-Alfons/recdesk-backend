@@ -1,8 +1,14 @@
-import { IsArray, IsUUID, IsOptional, IsString, ArrayMinSize } from 'class-validator';
+import {
+  IsArray,
+  IsUUID,
+  IsOptional,
+  IsString,
+  ArrayMinSize,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class BulkSendEmailDto {
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Array of candidate IDs to send emails to',
     type: [String],
     example: ['uuid-1', 'uuid-2', 'uuid-3'],
@@ -16,7 +22,9 @@ export class BulkSendEmailDto {
   @IsUUID()
   templateId: string;
 
-  @ApiPropertyOptional({ description: 'Override subject line for all emails (optional)' })
+  @ApiPropertyOptional({
+    description: 'Override subject line for all emails (optional)',
+  })
   @IsString()
   @IsOptional()
   subjectOverride?: string;

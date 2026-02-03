@@ -85,12 +85,7 @@ exports.JOB_APPLICATION_PATTERNS = {
         /i am submitting my application/i,
         /kindly find my (cv|resume) attached/i,
     ],
-    cvAttachmentPatterns: [
-        /cv/i,
-        /resume/i,
-        /curriculum/i,
-        /vitae/i,
-    ],
+    cvAttachmentPatterns: [/cv/i, /resume/i, /curriculum/i, /vitae/i],
 };
 exports.CV_FILE_EXTENSIONS = ['.pdf', '.doc', '.docx'];
 exports.CV_MIME_TYPES = [

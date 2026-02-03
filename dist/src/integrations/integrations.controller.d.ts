@@ -9,9 +9,9 @@ export declare class IntegrationsController {
     constructor(integrationsService: IntegrationsService, configService: ConfigService);
     getConnections(user: CurrentUserData): Promise<{
         id: string;
+        createdAt: Date;
         email: string;
         isActive: boolean;
-        createdAt: Date;
         provider: import("@prisma/client").$Enums.EmailProvider;
         autoImport: boolean;
         lastSyncAt: Date | null;
@@ -22,9 +22,9 @@ export declare class IntegrationsController {
     gmailCallback(code: string, state: string, error: string, res: Response): Promise<void>;
     updateConnection(id: string, updateDto: UpdateConnectionDto, user: CurrentUserData): Promise<{
         id: string;
+        createdAt: Date;
         email: string;
         isActive: boolean;
-        createdAt: Date;
         provider: import("@prisma/client").$Enums.EmailProvider;
         autoImport: boolean;
         lastSyncAt: Date | null;

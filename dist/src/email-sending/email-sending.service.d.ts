@@ -41,8 +41,8 @@ export declare class EmailSendingService {
         data: ({
             candidate: {
                 id: string;
-                email: string | null;
                 fullName: string;
+                email: string | null;
             };
             sentBy: {
                 id: string;

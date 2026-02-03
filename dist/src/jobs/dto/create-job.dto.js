@@ -31,7 +31,9 @@ __decorate([
     __metadata("design:type", String)
 ], CreateJobDto.prototype, "title", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ example: 'We are looking for an experienced backend developer...' }),
+    (0, swagger_1.ApiPropertyOptional)({
+        example: 'We are looking for an experienced backend developer...',
+    }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MaxLength)(10000),
@@ -44,7 +46,10 @@ __decorate([
     __metadata("design:type", String)
 ], CreateJobDto.prototype, "status", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ enum: client_1.ExperienceLevel, default: client_1.ExperienceLevel.JUNIOR }),
+    (0, swagger_1.ApiPropertyOptional)({
+        enum: client_1.ExperienceLevel,
+        default: client_1.ExperienceLevel.JUNIOR,
+    }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(client_1.ExperienceLevel),
     __metadata("design:type", String)
@@ -52,7 +57,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         example: ['Node.js', 'TypeScript', 'PostgreSQL'],
-        description: 'Required skills for the position'
+        description: 'Required skills for the position',
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
@@ -62,7 +67,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         example: ['Docker', 'AWS', 'GraphQL'],
-        description: 'Nice-to-have skills'
+        description: 'Nice-to-have skills',
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
@@ -71,8 +76,12 @@ __decorate([
 ], CreateJobDto.prototype, "preferredSkills", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        example: { yearsOfExperience: 5, education: 'Bachelor in CS', languages: ['English'] },
-        description: 'Additional requirements as JSON'
+        example: {
+            yearsOfExperience: 5,
+            education: 'Bachelor in CS',
+            languages: ['English'],
+        },
+        description: 'Additional requirements as JSON',
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsObject)(),

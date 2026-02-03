@@ -7,4 +7,4 @@ import { IntegrationsService } from './integrations.service';
   providers: [IntegrationsService],
   exports: [IntegrationsService],
 })
-export class IntegrationsModule { }
+export class IntegrationsModule {}

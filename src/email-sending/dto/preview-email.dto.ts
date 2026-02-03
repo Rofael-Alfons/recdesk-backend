@@ -6,7 +6,10 @@ export class PreviewEmailDto {
   @IsUUID()
   templateId: string;
 
-  @ApiPropertyOptional({ description: 'Candidate ID to use for personalization (optional - uses sample data if not provided)' })
+  @ApiPropertyOptional({
+    description:
+      'Candidate ID to use for personalization (optional - uses sample data if not provided)',
+  })
   @IsUUID()
   @IsOptional()
   candidateId?: string;

@@ -6,58 +6,58 @@ export declare class EmailTemplatesService {
     constructor(prisma: PrismaService);
     create(dto: CreateEmailTemplateDto, companyId: string): Promise<{
         id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
-        name: string;
         isDefault: boolean;
-        type: import("@prisma/client").$Enums.EmailTemplateType;
-        body: string;
         subject: string;
+        body: string;
+        type: import("@prisma/client").$Enums.EmailTemplateType;
     }>;
     findAll(query: QueryEmailTemplatesDto, companyId: string): Promise<{
         id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
-        name: string;
         isDefault: boolean;
-        type: import("@prisma/client").$Enums.EmailTemplateType;
-        body: string;
         subject: string;
+        body: string;
+        type: import("@prisma/client").$Enums.EmailTemplateType;
     }[]>;
     findOne(id: string, companyId: string): Promise<{
         id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
-        name: string;
         isDefault: boolean;
-        type: import("@prisma/client").$Enums.EmailTemplateType;
-        body: string;
         subject: string;
+        body: string;
+        type: import("@prisma/client").$Enums.EmailTemplateType;
     }>;
     findDefaultByType(type: EmailTemplateType, companyId: string): Promise<{
         id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
-        name: string;
         isDefault: boolean;
-        type: import("@prisma/client").$Enums.EmailTemplateType;
-        body: string;
         subject: string;
+        body: string;
+        type: import("@prisma/client").$Enums.EmailTemplateType;
     } | null>;
     update(id: string, dto: UpdateEmailTemplateDto, companyId: string): Promise<{
         id: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
-        name: string;
         isDefault: boolean;
-        type: import("@prisma/client").$Enums.EmailTemplateType;
-        body: string;
         subject: string;
+        body: string;
+        type: import("@prisma/client").$Enums.EmailTemplateType;
     }>;
     remove(id: string, companyId: string): Promise<{
         message: string;

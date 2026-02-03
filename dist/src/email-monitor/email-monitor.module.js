@@ -33,7 +33,12 @@ exports.EmailMonitorModule = EmailMonitorModule = __decorate([
             billing_module_1.BillingModule,
         ],
         controllers: [email_monitor_controller_1.EmailMonitorController],
-        providers: [email_monitor_service_1.EmailMonitorService, email_monitor_scheduler_1.EmailMonitorScheduler, email_prefilter_service_1.EmailPrefilterService, email_cleanup_service_1.EmailCleanupService],
+        providers: [
+            email_monitor_service_1.EmailMonitorService,
+            email_monitor_scheduler_1.EmailMonitorScheduler,
+            email_prefilter_service_1.EmailPrefilterService,
+            email_cleanup_service_1.EmailCleanupService,
+        ],
         exports: [email_monitor_service_1.EmailMonitorService, email_prefilter_service_1.EmailPrefilterService],
     })
 ], EmailMonitorModule);

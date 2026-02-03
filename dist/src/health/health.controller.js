@@ -69,7 +69,9 @@ __decorate([
     (0, common_1.Get)('ready'),
     (0, public_decorator_1.Public)(),
     (0, terminus_1.HealthCheck)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Readiness probe - is the service ready to accept traffic?' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Readiness probe - is the service ready to accept traffic?',
+    }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)

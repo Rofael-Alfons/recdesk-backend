@@ -11,17 +11,17 @@ export const CACHE_KEYS = {
 
 // Cache TTLs in seconds
 export const CACHE_TTLS = {
-  SUBSCRIPTION: 300,      // 5 minutes - subscription data changes rarely
+  SUBSCRIPTION: 300, // 5 minutes - subscription data changes rarely
   SUBSCRIPTION_PLAN: 3600, // 1 hour - plans almost never change
-  JOB_REQUIREMENTS: 600,  // 10 minutes - job requirements for scoring
-  COMPANY_SETTINGS: 300,  // 5 minutes - company settings
+  JOB_REQUIREMENTS: 600, // 10 minutes - job requirements for scoring
+  COMPANY_SETTINGS: 300, // 5 minutes - company settings
 } as const;
 
 @Injectable()
 export class CacheService {
   private readonly logger = new Logger(CacheService.name);
 
-  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {}
+  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) { }
 
   /**
    * Get a value from cache

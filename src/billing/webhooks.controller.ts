@@ -27,7 +27,7 @@ export class WebhooksController {
     @Headers('stripe-signature') signature: string,
   ) {
     const payload = req.rawBody;
-    
+
     if (!payload) {
       throw new Error('No raw body found');
     }

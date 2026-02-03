@@ -37,7 +37,9 @@ let EmailSendingService = EmailSendingService_1 = class EmailSendingService {
         this.templateEngine = templateEngine;
         this.billingService = billingService;
         const apiKey = this.configService.get('sendgrid.apiKey');
-        this.fromEmail = this.configService.get('sendgrid.fromEmail') || 'noreply@recdesk.io';
+        this.fromEmail =
+            this.configService.get('sendgrid.fromEmail') ||
+                'noreply@recdesk.io';
         if (apiKey) {
             mail_1.default.setApiKey(apiKey);
             this.isConfigured = true;
@@ -222,7 +224,7 @@ let EmailSendingService = EmailSendingService_1 = class EmailSendingService {
                 company: { name: company?.name || 'Your Company' },
                 sender: {
                     firstName: user?.firstName || 'Your',
-                    lastName: user?.lastName || 'Name'
+                    lastName: user?.lastName || 'Name',
                 },
             };
         }
@@ -236,7 +238,7 @@ let EmailSendingService = EmailSendingService_1 = class EmailSendingService {
                 company: { name: company?.name || 'Your Company' },
                 sender: {
                     firstName: user?.firstName || 'Your',
-                    lastName: user?.lastName || 'Name'
+                    lastName: user?.lastName || 'Name',
                 },
             };
         }

@@ -49,7 +49,7 @@ let EmailPrefilterService = EmailPrefilterService_1 = class EmailPrefilterServic
         };
     }
     checkSkipPatterns(email) {
-        const { subject, senderEmail, bodyText, bodyHtml, attachments, companyDomain } = email;
+        const { subject, senderEmail, bodyText, bodyHtml, attachments, companyDomain, } = email;
         const body = bodyText || bodyHtml || '';
         for (const pattern of prefilter_rules_1.SKIP_PATTERNS.autoReplySubjectPatterns) {
             if (pattern.test(subject)) {
@@ -67,7 +67,8 @@ let EmailPrefilterService = EmailPrefilterService_1 = class EmailPrefilterServic
                 };
             }
         }
-        if (companyDomain && senderEmail.toLowerCase().endsWith(`@${companyDomain.toLowerCase()}`)) {
+        if (companyDomain &&
+            senderEmail.toLowerCase().endsWith(`@${companyDomain.toLowerCase()}`)) {
             return {
                 action: 'skip',
                 reason: `Internal email from company domain: ${companyDomain}`,
@@ -155,17 +156,30 @@ let EmailPrefilterService = EmailPrefilterService_1 = class EmailPrefilterServic
     }
     hasCvAttachment(attachments) {
         return attachments.some((att) => {
-            const ext = att.filename.toLowerCase().slice(att.filename.lastIndexOf('.'));
+            const ext = att.filename
+                .toLowerCase()
+                .slice(att.filename.lastIndexOf('.'));
             return (prefilter_rules_1.CV_FILE_EXTENSIONS.includes(ext) || prefilter_rules_1.CV_MIME_TYPES.includes(att.mimeType));
         });
     }
     hasJobKeywords(subject, body) {
         const text = `${subject} ${body}`.toLowerCase();
         const jobKeywords = [
-            'job', 'position', 'role', 'vacancy', 'opening',
-            'application', 'applying', 'apply', 'candidate',
-            'cv', 'resume', 'curriculum vitae',
-            'hiring', 'recruitment', 'opportunity',
+            'job',
+            'position',
+            'role',
+            'vacancy',
+            'opening',
+            'application',
+            'applying',
+            'apply',
+            'candidate',
+            'cv',
+            'resume',
+            'curriculum vitae',
+            'hiring',
+            'recruitment',
+            'opportunity',
         ];
         return jobKeywords.some((keyword) => text.includes(keyword));
     }

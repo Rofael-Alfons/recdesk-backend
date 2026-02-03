@@ -18,11 +18,7 @@ function validateEnvironment(): void {
 
   // Critical validations for production
   if (isProduction) {
-    const criticalVars = [
-      'DATABASE_URL',
-      'JWT_SECRET',
-      'ENCRYPTION_KEY',
-    ];
+    const criticalVars = ['DATABASE_URL', 'JWT_SECRET', 'ENCRYPTION_KEY'];
 
     const missing = criticalVars.filter((v) => !process.env[v]);
     if (missing.length > 0) {
@@ -61,8 +57,7 @@ export default () => ({
 
   jwt: {
     secret:
-      process.env.JWT_SECRET ||
-      'your-super-secret-key-change-in-production',
+      process.env.JWT_SECRET || 'your-super-secret-key-change-in-production',
     accessExpirationSeconds: parseInt(
       process.env.JWT_ACCESS_EXPIRATION_SECONDS || '900',
       10,

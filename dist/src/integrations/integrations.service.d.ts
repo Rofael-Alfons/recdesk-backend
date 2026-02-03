@@ -15,9 +15,9 @@ export declare class IntegrationsService {
     }>;
     getEmailConnections(companyId: string): Promise<{
         id: string;
+        createdAt: Date;
         email: string;
         isActive: boolean;
-        createdAt: Date;
         provider: import("@prisma/client").$Enums.EmailProvider;
         autoImport: boolean;
         lastSyncAt: Date | null;
@@ -31,9 +31,9 @@ export declare class IntegrationsService {
         autoImport?: boolean;
     }): Promise<{
         id: string;
+        createdAt: Date;
         email: string;
         isActive: boolean;
-        createdAt: Date;
         provider: import("@prisma/client").$Enums.EmailProvider;
         autoImport: boolean;
         lastSyncAt: Date | null;

@@ -97,7 +97,9 @@ async function bootstrap() {
   if (!isProduction) {
     const config = new DocumentBuilder()
       .setTitle('RecDesk AI API')
-      .setDescription('API documentation for RecDesk AI - Hiring Intelligence Platform')
+      .setDescription(
+        'API documentation for RecDesk AI - Hiring Intelligence Platform',
+      )
       .setVersion('1.0')
       .addBearerAuth()
       .addTag('Authentication', 'User authentication endpoints')
@@ -118,8 +120,13 @@ async function bootstrap() {
   const jwtSecret = configService.get<string>('jwt.secret');
 
   if (isProduction) {
-    if (!jwtSecret || jwtSecret === 'your-super-secret-key-change-in-production') {
-      logger.error('FATAL: JWT_SECRET must be set to a strong secret in production!');
+    if (
+      !jwtSecret ||
+      jwtSecret === 'your-super-secret-key-change-in-production'
+    ) {
+      logger.error(
+        'FATAL: JWT_SECRET must be set to a strong secret in production!',
+      );
       process.exit(1);
     }
   }

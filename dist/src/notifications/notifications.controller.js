@@ -30,8 +30,13 @@ let NotificationsController = class NotificationsController {
                 subscriber.error(new Error('Unauthorized'));
             });
         }
-        const heartbeat$ = (0, rxjs_1.interval)(30000).pipe((0, rxjs_1.startWith)(0), (0, rxjs_1.map)(() => ({ type: 'heartbeat', data: { timestamp: new Date().toISOString() } })));
-        const notifications$ = this.notificationsService.subscribeToCompany(companyId).pipe((0, rxjs_1.map)((notification) => ({ type: 'notification', data: notification })));
+        const heartbeat$ = (0, rxjs_1.interval)(30000).pipe((0, rxjs_1.startWith)(0), (0, rxjs_1.map)(() => ({
+            type: 'heartbeat',
+            data: { timestamp: new Date().toISOString() },
+        })));
+        const notifications$ = this.notificationsService
+            .subscribeToCompany(companyId)
+            .pipe((0, rxjs_1.map)((notification) => ({ type: 'notification', data: notification })));
         return new rxjs_1.Observable((subscriber) => {
             const heartbeatSub = heartbeat$.subscribe({
                 next: (event) => {
