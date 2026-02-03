@@ -53,10 +53,9 @@ const ai_service_1 = require("../ai/ai.service");
 const file_processing_service_1 = require("../file-processing/file-processing.service");
 const notifications_service_1 = require("../notifications/notifications.service");
 const billing_service_1 = require("../billing/billing.service");
+const storage_service_1 = require("../storage/storage.service");
 const email_prefilter_service_1 = require("./email-prefilter.service");
-const uuid_1 = require("uuid");
 const path = __importStar(require("path"));
-const fs = __importStar(require("fs/promises"));
 const client_1 = require("@prisma/client");
 const AUTO_IMPORT_CONFIDENCE_THRESHOLD = 80;
 const CV_MIME_TYPES = [
@@ -73,10 +72,10 @@ let EmailMonitorService = EmailMonitorService_1 = class EmailMonitorService {
     emailPrefilterService;
     notificationsService;
     billingService;
+    storageService;
     logger = new common_1.Logger(EmailMonitorService_1.name);
     oauth2Client;
-    uploadDir;
-    constructor(prisma, configService, integrationsService, aiService, fileProcessingService, emailPrefilterService, notificationsService, billingService) {
+    constructor(prisma, configService, integrationsService, aiService, fileProcessingService, emailPrefilterService, notificationsService, billingService, storageService) {
         this.prisma = prisma;
         this.configService = configService;
         this.integrationsService = integrationsService;
@@ -85,20 +84,11 @@ let EmailMonitorService = EmailMonitorService_1 = class EmailMonitorService {
         this.emailPrefilterService = emailPrefilterService;
         this.notificationsService = notificationsService;
         this.billingService = billingService;
+        this.storageService = storageService;
         const clientId = this.configService.get('google.clientId');
         const clientSecret = this.configService.get('google.clientSecret');
         const redirectUri = this.configService.get('google.redirectUri');
         this.oauth2Client = new googleapis_1.google.auth.OAuth2(clientId, clientSecret, redirectUri);
-        this.uploadDir = path.join(process.cwd(), 'uploads', 'cvs');
-        this.ensureUploadDir();
-    }
-    async ensureUploadDir() {
-        try {
-            await fs.mkdir(this.uploadDir, { recursive: true });
-        }
-        catch (error) {
-            this.logger.error('Failed to create upload directory:', error);
-        }
     }
     async pollEmailsForConnection(connectionId, companyId) {
         const connection = await this.prisma.emailConnection.findUnique({
@@ -463,11 +453,8 @@ let EmailMonitorService = EmailMonitorService_1 = class EmailMonitorService {
             throw new Error('Failed to download attachment');
         }
         const fileBuffer = Buffer.from(response.data.data, 'base64');
-        const fileId = (0, uuid_1.v4)();
-        const ext = path.extname(attachment.filename);
-        const savedFileName = `${fileId}${ext}`;
-        const filePath = path.join(this.uploadDir, savedFileName);
-        await fs.writeFile(filePath, fileBuffer);
+        const uploadResult = await this.storageService.uploadFile(fileBuffer, attachment.filename, attachment.mimeType, companyId, 'cvs');
+        this.logger.debug(`Attachment uploaded: ${attachment.filename} -> ${uploadResult.key} (local: ${uploadResult.isLocal})`);
         const extraction = await this.fileProcessingService.extractText(fileBuffer, attachment.filename);
         if (!extraction.text || extraction.confidence < 30) {
             throw new Error('Could not extract text from CV attachment');
@@ -525,7 +512,7 @@ let EmailMonitorService = EmailMonitorService_1 = class EmailMonitorService {
                 portfolioUrl: parsedData.personalInfo?.portfolioUrl,
                 source: 'EMAIL',
                 status: 'NEW',
-                cvFileUrl: `/uploads/cvs/${savedFileName}`,
+                cvFileUrl: uploadResult.url,
                 cvFileName: attachment.filename,
                 cvText: extraction.text,
                 extractionConfidence: extraction.confidence,
@@ -776,6 +763,7 @@ exports.EmailMonitorService = EmailMonitorService = EmailMonitorService_1 = __de
         file_processing_service_1.FileProcessingService,
         email_prefilter_service_1.EmailPrefilterService,
         notifications_service_1.NotificationsService,
-        billing_service_1.BillingService])
+        billing_service_1.BillingService,
+        storage_service_1.StorageService])
 ], EmailMonitorService);
 //# sourceMappingURL=email-monitor.service.js.map

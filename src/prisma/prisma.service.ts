@@ -1,26 +1,36 @@
-import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 
 @Injectable()
 export class PrismaService
   extends PrismaClient
-  implements OnModuleInit, OnModuleDestroy
-{
+  implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(PrismaService.name);
+
   constructor() {
     super({
       log:
         process.env.NODE_ENV === 'development'
           ? ['query', 'info', 'warn', 'error']
           : ['error'],
+      // Connection pooling is configured via DATABASE_URL parameters:
+      // ?connection_limit=10&pool_timeout=20
     });
   }
 
   async onModuleInit() {
-    await this.$connect();
+    try {
+      await this.$connect();
+      this.logger.log('Successfully connected to database');
+    } catch (error) {
+      this.logger.error('Failed to connect to database', error);
+      throw error;
+    }
   }
 
   async onModuleDestroy() {
     await this.$disconnect();
+    this.logger.log('Disconnected from database');
   }
 
   async cleanDatabase() {

@@ -52,8 +52,8 @@ export declare class EmailSendingService {
         } & {
             id: string;
             candidateId: string;
-            subject: string;
             body: string;
+            subject: string;
             sentAt: Date;
             openedAt: Date | null;
             clickedAt: Date | null;

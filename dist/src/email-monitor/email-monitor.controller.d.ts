@@ -33,9 +33,9 @@ export declare class EmailMonitorController {
             createdAt: Date;
             status: import("@prisma/client").$Enums.EmailImportStatus;
             subject: string | null;
+            senderEmail: string;
             isJobApplication: boolean;
             confidence: number | null;
-            senderEmail: string;
         }[];
     }>;
 }

@@ -18,6 +18,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { QueueService } from '../queue/queue.service';
 import { AiService, ParsedCVData } from '../ai/ai.service';
+import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class CandidatesService {
@@ -26,8 +27,9 @@ export class CandidatesService {
   constructor(
     private prisma: PrismaService,
     private aiService: AiService,
+    private storageService: StorageService,
     @Optional() private queueService?: QueueService,
-  ) { }
+  ) {}
 
   async create(dto: CreateCandidateDto, companyId: string) {
     // Check for duplicate email if provided
@@ -75,7 +77,7 @@ export class CandidatesService {
       },
     });
 
-    return this.formatCandidateResponse(candidate);
+    return this.formatCandidateResponse(candidate, false);
   }
 
   async findAll(companyId: string, query: QueryCandidatesDto) {
@@ -133,8 +135,13 @@ export class CandidatesService {
       this.prisma.candidate.count({ where }),
     ]);
 
+    // Format candidates without signed URLs for list view (performance)
+    const formattedCandidates = await Promise.all(
+      candidates.map((c) => this.formatCandidateResponse(c, false)),
+    );
+
     return {
-      data: candidates.map(this.formatCandidateResponse),
+      data: formattedCandidates,
       pagination: {
         page,
         limit,
@@ -168,8 +175,11 @@ export class CandidatesService {
       throw new NotFoundException('Candidate not found');
     }
 
+    // Include signed URL for detail view
+    const formatted = await this.formatCandidateResponse(candidate, true);
+
     return {
-      ...this.formatCandidateResponse(candidate),
+      ...formatted,
       scores: candidate.scores,
       notes: candidate.notes,
       stageHistory: candidate.stageHistory,
@@ -230,7 +240,7 @@ export class CandidatesService {
       },
     });
 
-    return this.formatCandidateResponse(candidate);
+    return this.formatCandidateResponse(candidate, false);
   }
 
   async remove(candidateId: string, companyId: string) {
@@ -569,7 +579,33 @@ export class CandidatesService {
     };
   }
 
-  private formatCandidateResponse(candidate: any) {
+  /**
+   * Format candidate response with optional signed URL for CV file
+   * @param candidate - The candidate object from database
+   * @param includeSignedUrl - Whether to generate a signed URL for the CV file
+   */
+  private async formatCandidateResponse(
+    candidate: any,
+    includeSignedUrl: boolean = false,
+  ) {
+    let cvFileSignedUrl: string | null = null;
+
+    // Generate signed URL for CV file if requested and file exists
+    if (includeSignedUrl && candidate.cvFileUrl) {
+      try {
+        cvFileSignedUrl = await this.storageService.getSignedUrl(
+          candidate.cvFileUrl,
+          3600, // 1 hour expiry
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Failed to generate signed URL for candidate ${candidate.id}: ${error}`,
+        );
+        // Fall back to the stored URL (works for local storage)
+        cvFileSignedUrl = candidate.cvFileUrl;
+      }
+    }
+
     return {
       id: candidate.id,
       fullName: candidate.fullName,
@@ -582,6 +618,7 @@ export class CandidatesService {
       source: candidate.source,
       status: candidate.status,
       cvFileUrl: candidate.cvFileUrl,
+      cvFileSignedUrl, // Presigned URL for secure access
       cvFileName: candidate.cvFileName,
       overallScore: candidate.overallScore,
       aiSummary: candidate.aiSummary,
@@ -597,5 +634,25 @@ export class CandidatesService {
       certifications: candidate.certifications,
       languages: candidate.languages,
     };
+  }
+
+  /**
+   * Get a signed URL for a candidate's CV file
+   */
+  async getCvSignedUrl(candidateId: string, companyId: string): Promise<string> {
+    const candidate = await this.prisma.candidate.findFirst({
+      where: { id: candidateId, companyId },
+      select: { cvFileUrl: true },
+    });
+
+    if (!candidate) {
+      throw new NotFoundException('Candidate not found');
+    }
+
+    if (!candidate.cvFileUrl) {
+      throw new BadRequestException('Candidate does not have a CV file');
+    }
+
+    return this.storageService.getSignedUrl(candidate.cvFileUrl, 3600);
   }
 }

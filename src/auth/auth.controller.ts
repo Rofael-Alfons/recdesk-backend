@@ -9,13 +9,15 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto, LoginDto, RefreshTokenDto, ForgotPasswordDto, ResetPasswordDto } from './dto';
 import { Public } from '../common/decorators/public.decorator';
+import { ThrottleAuth, ThrottleRegistration } from '../common/decorators/throttle-auth.decorator';
 
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService) { }
 
   @Public()
+  @ThrottleRegistration()
   @Post('register')
   @ApiOperation({ summary: 'Register a new user and company' })
   @ApiResponse({ status: 201, description: 'User registered successfully' })
@@ -25,6 +27,7 @@ export class AuthController {
   }
 
   @Public()
+  @ThrottleAuth()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
@@ -35,6 +38,7 @@ export class AuthController {
   }
 
   @Public()
+  @ThrottleAuth()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token' })
@@ -54,6 +58,7 @@ export class AuthController {
   }
 
   @Public()
+  @ThrottleAuth()
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset email' })
@@ -63,6 +68,7 @@ export class AuthController {
   }
 
   @Public()
+  @ThrottleAuth()
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset password with token' })

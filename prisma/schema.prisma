@@ -70,6 +70,7 @@ model User {
   passwordResetTokens  PasswordResetToken[]
   notifications        Notification[]
 
+  @@index([companyId])
   @@map("users")
 }
 
@@ -89,6 +90,8 @@ model RefreshToken {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([expiresAt])
   @@map("refresh_tokens")
 }
 
@@ -102,6 +105,8 @@ model PasswordResetToken {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([expiresAt])
   @@map("password_reset_tokens")
 }
 
@@ -131,6 +136,8 @@ model Job {
   candidateScores CandidateScore[]
   pipelineStages  PipelineStage[]
 
+  @@index([companyId, status])
+  @@index([companyId, createdAt])
   @@map("jobs")
 }
 
@@ -160,6 +167,7 @@ model PipelineStage {
 
   candidates CandidateStage[]
 
+  @@index([jobId, orderIndex])
   @@map("pipeline_stages")
 }
 
@@ -223,7 +231,11 @@ model Candidate {
 
   @@index([companyId, overallScore])
   @@index([companyId, createdAt])
+  @@index([companyId, jobId])
+  @@index([companyId, status])
+  @@index([companyId, source])
   @@index([email])
+  @@index([jobId])
   @@map("candidates")
 }
 
@@ -285,6 +297,8 @@ model CandidateStage {
   stageId String
   stage   PipelineStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
 
+  @@index([candidateId])
+  @@index([stageId])
   @@map("candidate_stages")
 }
 
@@ -300,6 +314,8 @@ model CandidateNote {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([candidateId])
+  @@index([userId])
   @@map("candidate_notes")
 }
 
@@ -315,6 +331,8 @@ model CandidateAction {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([candidateId, createdAt])
+  @@index([userId])
   @@map("candidate_actions")
 }
 
@@ -381,6 +399,8 @@ model EmailImport {
   candidate Candidate?
 
   @@index([status, createdAt])  // For efficient cleanup queries
+  @@index([emailConnectionId, status])
+  @@index([emailConnectionId])
   @@map("email_imports")
 }
 
@@ -409,6 +429,8 @@ model EmailTemplate {
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
+  @@index([companyId])
+  @@index([companyId, type])
   @@map("email_templates")
 }
 
@@ -434,6 +456,8 @@ model EmailSent {
   sentById String
   sentBy   User   @relation(fields: [sentById], references: [id], onDelete: Cascade)
 
+  @@index([candidateId])
+  @@index([sentById])
   @@map("emails_sent")
 }
 

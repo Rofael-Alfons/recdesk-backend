@@ -1,7 +1,10 @@
+export type Environment = 'development' | 'production' | 'test';
 declare const _default: () => {
     port: number;
-    nodeEnv: string;
+    nodeEnv: Environment;
     apiPrefix: string;
+    isProduction: boolean;
+    isDevelopment: boolean;
     database: {
         url: string | undefined;
     };
@@ -17,7 +20,8 @@ declare const _default: () => {
         region: string;
         accessKeyId: string | undefined;
         secretAccessKey: string | undefined;
-        s3Bucket: string | undefined;
+        s3Bucket: string;
+        useLocalFallback: boolean;
     };
     redis: {
         host: string;
@@ -36,12 +40,13 @@ declare const _default: () => {
     };
     sendgrid: {
         apiKey: string | undefined;
-        fromEmail: string | undefined;
+        fromEmail: string;
     };
     google: {
         clientId: string | undefined;
         clientSecret: string | undefined;
         redirectUri: string;
+        pubsubTopic: string | undefined;
     };
     frontend: {
         url: string;
@@ -52,6 +57,7 @@ declare const _default: () => {
     stripe: {
         secretKey: string | undefined;
         webhookSecret: string | undefined;
+        freeTrialPriceId: string | undefined;
         starterPriceId: string | undefined;
         professionalPriceId: string | undefined;
         enterprisePriceId: string | undefined;

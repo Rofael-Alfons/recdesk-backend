@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CacheService } from '../cache/cache.service';
 import { UsageType, SubscriptionStatus } from '@prisma/client';
 
 export interface UsageStats {
@@ -51,6 +52,7 @@ export class BillingService {
     private prisma: PrismaService,
     private configService: ConfigService,
     private notificationsService: NotificationsService,
+    private cacheService: CacheService,
   ) {
     const stripeSecretKey = this.configService.get<string>('STRIPE_SECRET_KEY');
     if (stripeSecretKey) {
@@ -101,9 +103,15 @@ export class BillingService {
   }
 
   /**
-   * Get current subscription for a company
+   * Get current subscription for a company (with caching)
    */
   async getSubscription(companyId: string) {
+    // Try to get from cache first
+    const cached = await this.cacheService.getSubscription(companyId);
+    if (cached) {
+      return cached;
+    }
+
     const subscription = await this.prisma.subscription.findUnique({
       where: { companyId },
       include: {
@@ -122,7 +130,7 @@ export class BillingService {
       return null;
     }
 
-    return {
+    const result = {
       id: subscription.id,
       status: subscription.status,
       plan: {
@@ -130,6 +138,9 @@ export class BillingService {
         name: subscription.plan.name,
         cvLimit: subscription.plan.cvLimit,
         userLimit: subscription.plan.userLimit,
+        aiCallLimit: subscription.plan.aiCallLimit,
+        emailSentLimit: subscription.plan.emailSentLimit,
+        emailImportLimit: subscription.plan.emailImportLimit,
         features: subscription.plan.features,
       },
       currentPeriodStart: subscription.currentPeriodStart,
@@ -137,6 +148,18 @@ export class BillingService {
       cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
       trialEndsAt: subscription.trialEndsAt,
     };
+
+    // Cache the result
+    await this.cacheService.setSubscription(companyId, result);
+
+    return result;
+  }
+
+  /**
+   * Invalidate subscription cache when subscription changes
+   */
+  async invalidateSubscriptionCache(companyId: string) {
+    await this.cacheService.invalidateSubscription(companyId);
   }
 
   /**
@@ -267,6 +290,10 @@ export class BillingService {
         await this.handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
         break;
 
+      case 'customer.subscription.resumed':
+        await this.handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
+        break;
+
       default:
         this.logger.log(`Unhandled event type: ${event.type}`);
     }
@@ -344,6 +371,9 @@ export class BillingService {
       },
     });
 
+    // Invalidate cache to ensure fresh subscription data is fetched
+    await this.cacheService.invalidateSubscription(companyId);
+
     this.logger.log(`Subscription activated for company ${companyId}`);
   }
 
@@ -389,6 +419,9 @@ export class BillingService {
       where: { companyId: company.id },
       data: { status: 'ACTIVE' },
     });
+
+    // Invalidate cache since subscription status changed
+    await this.cacheService.invalidateSubscription(company.id);
 
     this.logger.log(`Invoice paid for company ${company.id}`);
   }
@@ -475,6 +508,9 @@ export class BillingService {
         cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
       },
     });
+
+    // Invalidate cache since subscription status changed
+    await this.cacheService.invalidateSubscription(companyId);
 
     this.logger.log(`Subscription updated for company ${companyId}`);
   }
@@ -886,8 +922,6 @@ export class BillingService {
     notified: number;
   }> {
     const now = new Date();
-    let expired = 0;
-    let notified = 0;
 
     // Find active subscriptions that have passed their period end
     const expiredSubscriptions = await this.prisma.subscription.findMany({
@@ -895,22 +929,26 @@ export class BillingService {
         status: 'ACTIVE',
         currentPeriodEnd: { lt: now },
       },
-      include: { company: true },
+      select: { id: true, companyId: true },
     });
 
-    for (const subscription of expiredSubscriptions) {
-      // Update status to EXPIRED
-      await this.prisma.subscription.update({
-        where: { id: subscription.id },
+    const expiredSubscriptionIds = expiredSubscriptions.map((s) => s.id);
+    const expiredCompanyIds = expiredSubscriptions.map((s) => s.companyId);
+
+    // Batch update all expired subscriptions
+    if (expiredSubscriptionIds.length > 0) {
+      await this.prisma.subscription.updateMany({
+        where: { id: { in: expiredSubscriptionIds } },
         data: { status: 'EXPIRED' },
       });
 
-      // Send notification
-      await this.notificationsService.notifySubscriptionExpired(subscription.companyId);
+      // Invalidate cache and send notifications in parallel
+      await Promise.all([
+        ...expiredCompanyIds.map((companyId) => this.cacheService.invalidateSubscription(companyId)),
+        ...expiredCompanyIds.map((companyId) => this.notificationsService.notifySubscriptionExpired(companyId)),
+      ]);
 
-      expired++;
-      notified++;
-      this.logger.log(`Expired subscription for company ${subscription.companyId}`);
+      this.logger.log(`Expired ${expiredSubscriptionIds.length} active subscriptions`);
     }
 
     // Also handle expired trials
@@ -919,20 +957,30 @@ export class BillingService {
         status: 'TRIALING',
         trialEndsAt: { lt: now },
       },
+      select: { id: true, companyId: true },
     });
 
-    for (const subscription of expiredTrials) {
-      await this.prisma.subscription.update({
-        where: { id: subscription.id },
+    const expiredTrialIds = expiredTrials.map((s) => s.id);
+    const expiredTrialCompanyIds = expiredTrials.map((s) => s.companyId);
+
+    // Batch update all expired trials
+    if (expiredTrialIds.length > 0) {
+      await this.prisma.subscription.updateMany({
+        where: { id: { in: expiredTrialIds } },
         data: { status: 'EXPIRED' },
       });
 
-      await this.notificationsService.notifyTrialExpired(subscription.companyId);
+      // Invalidate cache and send notifications in parallel
+      await Promise.all([
+        ...expiredTrialCompanyIds.map((companyId) => this.cacheService.invalidateSubscription(companyId)),
+        ...expiredTrialCompanyIds.map((companyId) => this.notificationsService.notifyTrialExpired(companyId)),
+      ]);
 
-      expired++;
-      notified++;
-      this.logger.log(`Expired trial for company ${subscription.companyId}`);
+      this.logger.log(`Expired ${expiredTrialIds.length} trials`);
     }
+
+    const expired = expiredSubscriptionIds.length + expiredTrialIds.length;
+    const notified = expired;
 
     this.logger.log(`Expiration check complete: ${expired} expired, ${notified} notified`);
     return { expired, notified };
@@ -1012,6 +1060,9 @@ export class BillingService {
       },
     });
 
+    // Invalidate cache since subscription status changed
+    await this.cacheService.invalidateSubscription(companyId);
+
     await this.notificationsService.notifyPaymentFailed(companyId, this.GRACE_PERIOD_DAYS);
 
     this.logger.log(`Started grace period for company ${companyId}, ends at ${gracePeriodEndsAt}`);
@@ -1023,7 +1074,6 @@ export class BillingService {
    */
   async checkGracePeriods(): Promise<{ expired: number }> {
     const now = new Date();
-    let expired = 0;
 
     // Find subscriptions with expired grace periods
     const expiredGracePeriods = await this.prisma.subscription.findMany({
@@ -1031,24 +1081,32 @@ export class BillingService {
         status: 'PAST_DUE',
         gracePeriodEndsAt: { lt: now },
       },
+      select: { id: true, companyId: true },
     });
 
-    for (const subscription of expiredGracePeriods) {
-      // Update status to UNPAID (access should be restricted)
-      await this.prisma.subscription.update({
-        where: { id: subscription.id },
+    const expiredIds = expiredGracePeriods.map((s) => s.id);
+    const expiredCompanyIds = expiredGracePeriods.map((s) => s.companyId);
+
+    // Batch update all expired grace periods
+    if (expiredIds.length > 0) {
+      await this.prisma.subscription.updateMany({
+        where: { id: { in: expiredIds } },
         data: {
           status: 'UNPAID',
           gracePeriodEndsAt: null, // Clear grace period
         },
       });
 
-      expired++;
-      this.logger.log(`Grace period expired for company ${subscription.companyId}`);
+      // Invalidate cache for all affected companies
+      await Promise.all(
+        expiredCompanyIds.map((companyId) => this.cacheService.invalidateSubscription(companyId)),
+      );
+
+      this.logger.log(`Grace period expired for ${expiredIds.length} companies`);
     }
 
-    this.logger.log(`Grace period check complete: ${expired} expired`);
-    return { expired };
+    this.logger.log(`Grace period check complete: ${expiredIds.length} expired`);
+    return { expired: expiredIds.length };
   }
 
   /**
