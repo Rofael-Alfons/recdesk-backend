@@ -17,11 +17,19 @@ export class RedisHealthIndicator extends HealthIndicator {
   }
 
   private initRedis() {
+    const redisUrl = this.configService.get<string>('redis.url');
     const redisHost = this.configService.get<string>('redis.host');
     const redisPort = this.configService.get<number>('redis.port');
     const redisPassword = this.configService.get<string>('redis.password');
 
-    if (redisHost) {
+    if (redisUrl) {
+      // Use REDIS_URL directly (Railway format)
+      this.redis = new Redis(redisUrl, {
+        maxRetriesPerRequest: 1,
+        connectTimeout: 5000,
+        lazyConnect: true,
+      });
+    } else if (redisHost) {
       this.redis = new Redis({
         host: redisHost,
         port: redisPort || 6379,

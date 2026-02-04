@@ -80,11 +80,29 @@ export default () => ({
     useLocalFallback: process.env.S3_USE_LOCAL_FALLBACK === 'true',
   },
 
-  redis: {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6379', 10),
-    password: process.env.REDIS_PASSWORD,
-  },
+  redis: (() => {
+    // Support Railway's REDIS_URL format: redis://default:password@host:port
+    const redisUrl = process.env.REDIS_URL;
+    if (redisUrl) {
+      try {
+        const url = new URL(redisUrl);
+        return {
+          host: url.hostname,
+          port: parseInt(url.port || '6379', 10),
+          password: url.password || undefined,
+          url: redisUrl,
+        };
+      } catch {
+        // Fall through to manual config
+      }
+    }
+    return {
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379', 10),
+      password: process.env.REDIS_PASSWORD,
+      url: undefined,
+    };
+  })(),
 
   // AI Provider Configuration
   // Set AI_PROVIDER to 'groq' for development (cost-effective) or 'openai' for production

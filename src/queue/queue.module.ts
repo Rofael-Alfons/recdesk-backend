@@ -15,22 +15,31 @@ import { QUEUE_NAMES } from './queue.constants';
   imports: [
     BullModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        redis: {
-          host: configService.get<string>('redis.host'),
-          port: configService.get<number>('redis.port'),
-          password: configService.get<string>('redis.password') || undefined,
-        },
-        defaultJobOptions: {
-          attempts: 3,
-          backoff: {
-            type: 'exponential',
-            delay: 2000,
+      useFactory: (configService: ConfigService) => {
+        const redisUrl = configService.get<string>('redis.url');
+        
+        // Use REDIS_URL if available (Railway format), otherwise use individual config
+        const redisConfig = redisUrl
+          ? { url: redisUrl }
+          : {
+              host: configService.get<string>('redis.host'),
+              port: configService.get<number>('redis.port'),
+              password: configService.get<string>('redis.password') || undefined,
+            };
+
+        return {
+          redis: redisConfig,
+          defaultJobOptions: {
+            attempts: 3,
+            backoff: {
+              type: 'exponential',
+              delay: 2000,
+            },
+            removeOnComplete: 100, // Keep last 100 completed jobs
+            removeOnFail: 50, // Keep last 50 failed jobs
           },
-          removeOnComplete: 100, // Keep last 100 completed jobs
-          removeOnFail: 50, // Keep last 50 failed jobs
-        },
-      }),
+        };
+      },
       inject: [ConfigService],
     }),
     BullModule.registerQueue(

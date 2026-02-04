@@ -17,7 +17,17 @@ import { CacheService } from './cache.service';
           configService.get<string>('nodeEnv') === 'production';
 
         // Use Redis if configured, otherwise use in-memory cache
-        if (redisHost && (isProduction || redisHost !== 'localhost')) {
+        const redisUrl = configService.get<string>('redis.url');
+        
+        if (redisUrl) {
+          // Use REDIS_URL directly (Railway format)
+          return {
+            store: await redisStore({
+              url: redisUrl,
+              ttl: 300, // Default TTL: 5 minutes
+            }),
+          };
+        } else if (redisHost && (isProduction || redisHost !== 'localhost')) {
           return {
             store: await redisStore({
               host: redisHost,
