@@ -20,8 +20,8 @@ export declare class EmailSendingController {
         data: ({
             candidate: {
                 id: string;
-                fullName: string;
                 email: string | null;
+                fullName: string;
             };
             sentBy: {
                 id: string;
@@ -31,8 +31,8 @@ export declare class EmailSendingController {
         } & {
             id: string;
             candidateId: string;
-            body: string;
             subject: string;
+            body: string;
             sentAt: Date;
             openedAt: Date | null;
             clickedAt: Date | null;

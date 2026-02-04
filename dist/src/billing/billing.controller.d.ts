@@ -21,18 +21,18 @@ export declare class BillingController {
     }>;
     getUsage(user: AuthUser): Promise<import("./billing.service").UsageStats>;
     getInvoices(user: AuthUser): Promise<{
-        status: import("@prisma/client").$Enums.InvoiceStatus;
-        createdAt: Date;
         id: string;
+        createdAt: Date;
         companyId: string;
+        status: import("@prisma/client").$Enums.InvoiceStatus;
+        periodStart: Date;
+        periodEnd: Date;
         stripeInvoiceId: string;
         amountDue: number;
         amountPaid: number;
         currency: string;
         invoicePdf: string | null;
         hostedInvoiceUrl: string | null;
-        periodStart: Date;
-        periodEnd: Date;
         paidAt: Date | null;
     }[]>;
     seedPlans(): Promise<{
