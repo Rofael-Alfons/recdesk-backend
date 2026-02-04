@@ -1,11 +1,17 @@
-# Build stage
+# Build stage - using SWC for fast, memory-efficient compilation
 FROM node:20-alpine AS builder
+
+# Install build dependencies for native modules (bcrypt, etc.)
+RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files first for better layer caching
 COPY package*.json ./
 COPY prisma ./prisma/
+COPY .swcrc ./
+COPY nest-cli.json ./
+COPY tsconfig*.json ./
 
 # Install all dependencies (including dev for build)
 RUN npm ci
@@ -14,16 +20,18 @@ RUN npm ci
 RUN npx prisma generate
 
 # Copy source code
-COPY . .
+COPY src ./src
 
-# Build with increased memory limit
-ENV NODE_OPTIONS="--max-old-space-size=2048"
+# Build using SWC (much faster and uses ~10x less memory than tsc)
+# SWC is written in Rust and doesn't suffer from Node.js heap limits
+# Fallback: NODE_OPTIONS for any Node.js processes during build
+ENV NODE_OPTIONS="--max-old-space-size=8192"
 RUN npm run build
 
 # Remove dev dependencies after build
 RUN npm prune --omit=dev
 
-# Production stage
+# Production stage - minimal image
 FROM node:20-alpine AS production
 
 WORKDIR /app
