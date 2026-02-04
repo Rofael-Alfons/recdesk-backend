@@ -15,22 +15,50 @@ import { QUEUE_NAMES } from './queue.constants';
   imports: [
     BullModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        redis: {
-          host: configService.get<string>('redis.host'),
-          port: configService.get<number>('redis.port'),
-          password: configService.get<string>('redis.password') || undefined,
-        },
-        defaultJobOptions: {
-          attempts: 3,
-          backoff: {
-            type: 'exponential',
-            delay: 2000,
+      useFactory: (configService: ConfigService) => {
+        const redisUrl = configService.get<string>('redis.url');
+        const redisHost = configService.get<string>('redis.host');
+        const redisPort = configService.get<number>('redis.port');
+        const redisPassword = configService.get<string>('redis.password');
+
+        // Bull expects redis config as ioredis options
+        // For URL: parse and pass as host/port/password
+        // See: https://github.com/OptimalBits/bull/blob/master/REFERENCE.md
+        let redisConfig: any;
+        
+        if (redisUrl) {
+          try {
+            const url = new URL(redisUrl);
+            redisConfig = {
+              host: url.hostname,
+              port: parseInt(url.port || '6379', 10),
+              password: url.password || undefined,
+            };
+          } catch {
+            // Invalid URL, fall back to defaults
+            redisConfig = { host: 'localhost', port: 6379 };
+          }
+        } else {
+          redisConfig = {
+            host: redisHost || 'localhost',
+            port: redisPort || 6379,
+            password: redisPassword || undefined,
+          };
+        }
+
+        return {
+          redis: redisConfig,
+          defaultJobOptions: {
+            attempts: 3,
+            backoff: {
+              type: 'exponential',
+              delay: 2000,
+            },
+            removeOnComplete: 100, // Keep last 100 completed jobs
+            removeOnFail: 50, // Keep last 50 failed jobs
           },
-          removeOnComplete: 100, // Keep last 100 completed jobs
-          removeOnFail: 50, // Keep last 50 failed jobs
-        },
-      }),
+        };
+      },
       inject: [ConfigService],
     }),
     BullModule.registerQueue(

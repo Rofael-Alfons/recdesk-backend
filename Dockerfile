@@ -14,7 +14,8 @@ COPY nest-cli.json ./
 COPY tsconfig*.json ./
 
 # Install all dependencies (including dev for build)
-RUN npm ci
+# Using npm install instead of npm ci for better compatibility
+RUN npm install --legacy-peer-deps
 
 # Generate Prisma client
 RUN npx prisma generate
@@ -50,7 +51,7 @@ EXPOSE 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
 # Start the application
 CMD ["node", "dist/main"]
