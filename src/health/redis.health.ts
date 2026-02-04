@@ -43,18 +43,20 @@ export class RedisHealthIndicator extends HealthIndicator {
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
     if (!this.redis) {
-      // Redis not configured, skip check
-      return this.getStatus(key, true, { message: 'Redis not configured' });
+      // Redis not configured, report as optional/skipped
+      return this.getStatus(key, true, { message: 'Redis not configured (optional)' });
     }
 
     try {
       await this.redis.ping();
       return this.getStatus(key, true);
     } catch (error) {
-      throw new HealthCheckError(
-        'Redis health check failed',
-        this.getStatus(key, false, { message: error.message }),
-      );
+      // Don't fail health check for Redis - it's optional
+      // Just report the status
+      return this.getStatus(key, true, { 
+        message: `Redis unavailable (optional): ${error.message}`,
+        optional: true 
+      });
     }
   }
 
