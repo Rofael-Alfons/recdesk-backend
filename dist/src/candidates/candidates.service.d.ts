@@ -76,14 +76,13 @@ export declare class CandidatesService {
     findOne(candidateId: string, companyId: string): Promise<{
         scores: ({
             job: {
-                title: string;
                 id: string;
+                title: string;
             };
         } & {
-            jobId: string;
             id: string;
+            jobId: string;
             overallScore: number;
-            scoredAt: Date;
             skillsMatchScore: number | null;
             experienceScore: number | null;
             educationScore: number | null;
@@ -92,6 +91,7 @@ export declare class CandidatesService {
             scoreExplanation: Prisma.JsonValue | null;
             recommendation: string | null;
             algorithmVersion: string;
+            scoredAt: Date;
             candidateId: string;
         })[];
         notes: ({
@@ -101,8 +101,8 @@ export declare class CandidatesService {
                 lastName: string;
             };
         } & {
-            createdAt: Date;
             id: string;
+            createdAt: Date;
             updatedAt: Date;
             candidateId: string;
             content: string;
@@ -110,17 +110,17 @@ export declare class CandidatesService {
         })[];
         stageHistory: ({
             stage: {
-                jobId: string;
-                name: string;
                 id: string;
+                name: string;
                 orderIndex: number;
                 color: string;
                 isDefault: boolean;
+                jobId: string;
             };
         } & {
             id: string;
-            movedAt: Date;
             candidateId: string;
+            movedAt: Date;
             stageId: string;
         })[];
         id: any;
@@ -205,8 +205,8 @@ export declare class CandidatesService {
             lastName: string;
         };
     } & {
-        createdAt: Date;
         id: string;
+        createdAt: Date;
         updatedAt: Date;
         candidateId: string;
         content: string;

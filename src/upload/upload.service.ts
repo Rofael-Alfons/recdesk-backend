@@ -33,7 +33,7 @@ export class UploadService {
     private configService: ConfigService,
     private billingService: BillingService,
     private storageService: StorageService,
-  ) {}
+  ) { }
 
   async uploadBulkCVs(
     files: Express.Multer.File[],

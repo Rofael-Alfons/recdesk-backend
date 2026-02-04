@@ -88,14 +88,13 @@ export declare class CandidatesController {
     findOne(id: string, user: CurrentUserData): Promise<{
         scores: ({
             job: {
-                title: string;
                 id: string;
+                title: string;
             };
         } & {
-            jobId: string;
             id: string;
+            jobId: string;
             overallScore: number;
-            scoredAt: Date;
             skillsMatchScore: number | null;
             experienceScore: number | null;
             educationScore: number | null;
@@ -104,6 +103,7 @@ export declare class CandidatesController {
             scoreExplanation: import("@prisma/client/runtime/library").JsonValue | null;
             recommendation: string | null;
             algorithmVersion: string;
+            scoredAt: Date;
             candidateId: string;
         })[];
         notes: ({
@@ -113,8 +113,8 @@ export declare class CandidatesController {
                 lastName: string;
             };
         } & {
-            createdAt: Date;
             id: string;
+            createdAt: Date;
             updatedAt: Date;
             candidateId: string;
             content: string;
@@ -122,17 +122,17 @@ export declare class CandidatesController {
         })[];
         stageHistory: ({
             stage: {
-                jobId: string;
-                name: string;
                 id: string;
+                name: string;
                 orderIndex: number;
                 color: string;
                 isDefault: boolean;
+                jobId: string;
             };
         } & {
             id: string;
-            movedAt: Date;
             candidateId: string;
+            movedAt: Date;
             stageId: string;
         })[];
         id: any;
@@ -198,8 +198,8 @@ export declare class CandidatesController {
             lastName: string;
         };
     } & {
-        createdAt: Date;
         id: string;
+        createdAt: Date;
         updatedAt: Date;
         candidateId: string;
         content: string;
