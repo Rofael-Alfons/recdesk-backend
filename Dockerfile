@@ -14,7 +14,8 @@ COPY nest-cli.json ./
 COPY tsconfig*.json ./
 
 # Install all dependencies (including dev for build)
-RUN npm ci
+# Using npm install instead of npm ci for better compatibility
+RUN npm install --legacy-peer-deps
 
 # Generate Prisma client
 RUN npx prisma generate
