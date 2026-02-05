@@ -51,14 +51,17 @@ const logger = new Logger('QueueModule');
           logger.log(`Configuring Bull queue with Redis: ${redisConfig.host}:${redisConfig.port}`);
         }
 
-        // Add error handling options to prevent unhandled errors
-        redisConfig.maxRetriesPerRequest = 3;
+        // Add error handling options to prevent unhandled errors and hanging
+        redisConfig.connectTimeout = 5000; // 5 second connection timeout
+        redisConfig.enableOfflineQueue = false; // Fail fast when disconnected
+        redisConfig.maxRetriesPerRequest = 1; // Fail fast on request errors
+        redisConfig.lazyConnect = true; // Don't block on connection
         redisConfig.retryStrategy = (times: number) => {
           if (times > 3) {
             logger.error('Redis connection failed after 3 retries');
             return null; // Stop retrying
           }
-          return Math.min(times * 200, 2000); // Retry with backoff
+          return Math.min(times * 500, 2000); // Retry with backoff
         };
 
         return {
