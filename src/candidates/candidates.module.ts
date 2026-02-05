@@ -4,9 +4,9 @@ import { CandidatesService } from './candidates.service';
 import { AiModule } from '../ai/ai.module';
 import { BillingModule } from '../billing/billing.module';
 
-// Check if Redis is available (same logic as app.module.ts)
+// Check if Redis is available - only when explicitly configured via URL or host
 const isRedisConfigured = (): boolean => {
-  return !!process.env.REDIS_HOST || process.env.NODE_ENV === 'production';
+  return !!process.env.REDIS_URL || !!process.env.REDIS_HOST;
 };
 
 @Module({

@@ -28,9 +28,9 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import configuration from './config/configuration';
 
-// Check if Redis is available
+// Check if Redis is available - only when explicitly configured via URL or host
 const isRedisConfigured = (): boolean => {
-  return !!process.env.REDIS_HOST || process.env.NODE_ENV === 'production';
+  return !!process.env.REDIS_URL || !!process.env.REDIS_HOST;
 };
 
 @Module({
