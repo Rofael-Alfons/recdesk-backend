@@ -83,8 +83,18 @@ export class StorageService implements OnModuleInit {
     try {
       await this.s3Client.send(new HeadBucketCommand({ Bucket: this.bucket }));
       this.logger.log(`Successfully connected to S3 bucket: ${this.bucket}`);
-    } catch (error) {
-      this.logger.error(`Failed to access S3 bucket: ${this.bucket}`, error);
+    } catch (error: any) {
+      this.logger.error(`Failed to access S3 bucket: ${this.bucket}`);
+      this.logger.error(`S3 Error Name: ${error.name}`);
+      this.logger.error(`S3 Error Message: ${error.message}`);
+      this.logger.error(`S3 Error Code: ${error.$metadata?.httpStatusCode || 'unknown'}`);
+      if (error.name === 'NotFound') {
+        this.logger.error(`Bucket "${this.bucket}" does not exist or you don't have permission to access it.`);
+      } else if (error.name === 'InvalidAccessKeyId' || error.name === 'SignatureDoesNotMatch') {
+        this.logger.error('Invalid AWS credentials. Check your AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.');
+      } else if (error.name === 'AccessDenied') {
+        this.logger.error('Access denied. Check your IAM permissions for this bucket.');
+      }
       this.logger.warn('Falling back to local storage due to S3 access error.');
       this.useLocalFallback = true;
     }
