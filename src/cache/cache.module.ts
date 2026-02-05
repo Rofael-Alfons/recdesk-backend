@@ -30,12 +30,13 @@ const withTimeout = <T>(promise: Promise<T>, ms: number, errorMsg: string): Prom
         const redisUrl = configService.get<string>('redis.url');
 
         // Common Redis options for non-blocking connection
-        const redisOptions = {
+        const redisOptions: any = {
           ttl: 300, // Default TTL: 5 minutes
           lazyConnect: true, // Don't block on connection
           enableOfflineQueue: false, // Fail fast when disconnected
           connectTimeout: 5000, // 5 second connection timeout
           maxRetriesPerRequest: 1, // Fail fast on request errors
+          family: 0, // Support both IPv4 and IPv6 (Railway compatibility)
           retryStrategy: (times: number) => {
             if (times > 3) {
               logger.warn('Redis retry limit reached, giving up');
@@ -44,6 +45,12 @@ const withTimeout = <T>(promise: Promise<T>, ms: number, errorMsg: string): Prom
             return Math.min(times * 500, 2000);
           },
         };
+
+        // Add TLS support for rediss:// URLs (Railway may use TLS)
+        if (redisUrl?.startsWith('rediss://')) {
+          redisOptions.tls = {};
+          logger.log('TLS enabled for Redis connection');
+        }
 
         try {
           if (redisUrl) {

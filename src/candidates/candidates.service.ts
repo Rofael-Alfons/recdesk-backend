@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   Optional,
+  Inject,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -28,7 +29,7 @@ export class CandidatesService {
     private prisma: PrismaService,
     private aiService: AiService,
     private storageService: StorageService,
-    @Optional() private queueService?: QueueService,
+    @Optional() @Inject(QueueService) private queueService?: QueueService,
   ) { }
 
   async create(dto: CreateCandidateDto, companyId: string) {
