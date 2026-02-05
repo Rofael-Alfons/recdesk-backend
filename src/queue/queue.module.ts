@@ -96,16 +96,18 @@ function buildRedisConfig(configService: ConfigService): any {
 
   // Add common options for Railway compatibility
   redisConfig.family = 0; // Support both IPv4 and IPv6
-  redisConfig.connectTimeout = 5000;
-  redisConfig.enableOfflineQueue = false;
-  redisConfig.maxRetriesPerRequest = 1;
-  redisConfig.lazyConnect = true;
+  redisConfig.connectTimeout = 10000;
+  redisConfig.enableOfflineQueue = true; // Queue commands while disconnected instead of throwing
+  redisConfig.maxRetriesPerRequest = 3;
+  redisConfig.lazyConnect = false; // Connect immediately to avoid race conditions
   redisConfig.retryStrategy = (times: number) => {
-    if (times > 3) {
-      logger.error('Redis connection failed after 3 retries');
+    if (times > 10) {
+      logger.error('Redis connection failed after 10 retries');
       return null;
     }
-    return Math.min(times * 500, 2000);
+    const delay = Math.min(times * 500, 5000);
+    logger.warn(`Redis retry attempt ${times}, next retry in ${delay}ms`);
+    return delay;
   };
 
   return redisConfig;
