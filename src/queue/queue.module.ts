@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, Logger } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CvProcessingProcessor } from './processors/cv-processing.processor';
@@ -10,6 +10,8 @@ import { AiModule } from '../ai/ai.module';
 import { FileProcessingModule } from '../file-processing/file-processing.module';
 import { BillingModule } from '../billing/billing.module';
 import { QUEUE_NAMES } from './queue.constants';
+
+const logger = new Logger('QueueModule');
 
 @Module({
   imports: [
@@ -34,8 +36,10 @@ import { QUEUE_NAMES } from './queue.constants';
               port: parseInt(url.port || '6379', 10),
               password: url.password || undefined,
             };
-          } catch {
+            logger.log(`Configuring Bull queue with Redis URL: ${url.hostname}:${url.port}`);
+          } catch (e) {
             // Invalid URL, fall back to defaults
+            logger.warn(`Invalid REDIS_URL, falling back to localhost`);
             redisConfig = { host: 'localhost', port: 6379 };
           }
         } else {
@@ -44,7 +48,18 @@ import { QUEUE_NAMES } from './queue.constants';
             port: redisPort || 6379,
             password: redisPassword || undefined,
           };
+          logger.log(`Configuring Bull queue with Redis: ${redisConfig.host}:${redisConfig.port}`);
         }
+
+        // Add error handling options to prevent unhandled errors
+        redisConfig.maxRetriesPerRequest = 3;
+        redisConfig.retryStrategy = (times: number) => {
+          if (times > 3) {
+            logger.error('Redis connection failed after 3 retries');
+            return null; // Stop retrying
+          }
+          return Math.min(times * 200, 2000); // Retry with backoff
+        };
 
         return {
           redis: redisConfig,
