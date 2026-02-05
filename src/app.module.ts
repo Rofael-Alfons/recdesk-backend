@@ -28,11 +28,6 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import configuration from './config/configuration';
 
-// Check if Redis is available - only when explicitly configured via URL or host
-const isRedisConfigured = (): boolean => {
-  return !!process.env.REDIS_URL || !!process.env.REDIS_HOST;
-};
-
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -98,8 +93,8 @@ const isRedisConfigured = (): boolean => {
     EmailTemplatesModule,
     EmailSendingModule,
     NotificationsModule,
-    // Only import QueueModule if Redis is configured
-    ...(isRedisConfigured() ? [QueueModule] : []),
+    // QueueModule with graceful degradation - provides NoOpQueueService when Redis unavailable
+    QueueModule.forRoot(),
   ],
   providers: [
     // Global exception filter with Pino logger

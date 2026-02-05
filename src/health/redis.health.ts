@@ -24,12 +24,18 @@ export class RedisHealthIndicator extends HealthIndicator {
     const redisPort = this.configService.get<number>('redis.port');
     const redisPassword = this.configService.get<string>('redis.password');
 
-    const redisOptions = {
+    const redisOptions: any = {
       maxRetriesPerRequest: 1,
       connectTimeout: 5000,
       lazyConnect: true,
+      family: 0, // Support both IPv4 and IPv6 (Railway compatibility)
       retryStrategy: () => null, // Don't retry on connection failure
     };
+
+    // Add TLS support for rediss:// URLs (Railway may use TLS)
+    if (redisUrl?.startsWith('rediss://')) {
+      redisOptions.tls = {};
+    }
 
     if (redisUrl) {
       // Use REDIS_URL directly (Railway format)
