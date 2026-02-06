@@ -124,6 +124,7 @@ export default () => ({
     fromEmail: process.env.SENDGRID_FROM_EMAIL || 'noreply@recdesk.io',
   },
 
+  // Google (for Gmail email integration)
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -131,6 +132,42 @@ export default () => ({
       process.env.GOOGLE_REDIRECT_URI ||
       'http://localhost:3000/api/integrations/gmail/callback',
     pubsubTopic: process.env.GOOGLE_PUBSUB_TOPIC,
+  },
+
+  // Google OAuth (for user authentication)
+  googleAuth: {
+    clientId:
+      process.env.NODE_ENV === 'production'
+        ? process.env.GOOGLE_AUTH_CLIENT_ID_PROD
+        : process.env.GOOGLE_AUTH_CLIENT_ID,
+    clientSecret:
+      process.env.NODE_ENV === 'production'
+        ? process.env.GOOGLE_AUTH_CLIENT_SECRET_PROD
+        : process.env.GOOGLE_AUTH_CLIENT_SECRET,
+    redirectUri:
+      process.env.NODE_ENV === 'production'
+        ? process.env.GOOGLE_AUTH_REDIRECT_URI_PROD ||
+          'https://api.recdesk.io/api/auth/google/callback'
+        : process.env.GOOGLE_AUTH_REDIRECT_URI ||
+          'http://localhost:3000/api/auth/google/callback',
+  },
+
+  // Microsoft OAuth (for user authentication)
+  microsoft: {
+    clientId:
+      process.env.NODE_ENV === 'production'
+        ? process.env.MICROSOFT_CLIENT_ID_PROD
+        : process.env.MICROSOFT_CLIENT_ID,
+    clientSecret:
+      process.env.NODE_ENV === 'production'
+        ? process.env.MICROSOFT_CLIENT_SECRET_PROD
+        : process.env.MICROSOFT_CLIENT_SECRET,
+    redirectUri:
+      process.env.NODE_ENV === 'production'
+        ? process.env.MICROSOFT_REDIRECT_URI_PROD ||
+          'https://api.recdesk.io/api/auth/microsoft/callback'
+        : process.env.MICROSOFT_REDIRECT_URI ||
+          'http://localhost:3000/api/auth/microsoft/callback',
   },
 
   frontend: {
