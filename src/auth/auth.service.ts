@@ -19,6 +19,17 @@ import {
 import { JwtPayload } from './strategies/jwt.strategy';
 import * as crypto from 'crypto';
 
+// OAuth profile interface used by both Google and Microsoft strategies
+export interface OAuthProfile {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  avatarUrl?: string;
+}
+
+export type OAuthProvider = 'google' | 'microsoft';
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -104,6 +115,13 @@ export class AuthService {
       throw new UnauthorizedException('Account is deactivated');
     }
 
+    // Check if user has a password (OAuth-only users don't)
+    if (!user.passwordHash) {
+      throw new UnauthorizedException(
+        'This account uses social login. Please sign in with Google or Microsoft.',
+      );
+    }
+
     const isPasswordValid = await bcrypt.compare(
       dto.password,
       user.passwordHash,
@@ -122,6 +140,7 @@ export class AuthService {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
+        avatarUrl: user.avatarUrl,
         company: {
           id: user.company.id,
           name: user.company.name,
@@ -321,6 +340,177 @@ export class AuthService {
     return {
       message:
         'Password has been reset successfully. Please login with your new password.',
+    };
+  }
+
+  /**
+   * Validate OAuth user - find existing user or create new one
+   * Handles account linking if user exists with same email
+   */
+  async validateOAuthUser(
+    profile: OAuthProfile,
+    provider: OAuthProvider,
+  ): Promise<{
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    role: string;
+    companyId: string;
+    isNewUser: boolean;
+    needsCompanySetup: boolean;
+  }> {
+    const email = profile.email.toLowerCase();
+    const providerIdField = provider === 'google' ? 'googleId' : 'microsoftId';
+
+    // First, try to find user by provider ID
+    let user = await this.prisma.user.findFirst({
+      where: { [providerIdField]: profile.id },
+      include: { company: true },
+    });
+
+    if (user) {
+      // User found by provider ID - return existing user
+      if (!user.isActive) {
+        throw new UnauthorizedException('Account is deactivated');
+      }
+
+      // Update avatar if changed
+      if (profile.avatarUrl && user.avatarUrl !== profile.avatarUrl) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { avatarUrl: profile.avatarUrl },
+        });
+      }
+
+      return {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        companyId: user.companyId,
+        isNewUser: false,
+        needsCompanySetup: false,
+      };
+    }
+
+    // Try to find user by email (for account linking)
+    user = await this.prisma.user.findUnique({
+      where: { email },
+      include: { company: true },
+    });
+
+    if (user) {
+      // User exists with this email - link the OAuth provider
+      if (!user.isActive) {
+        throw new UnauthorizedException('Account is deactivated');
+      }
+
+      // Link the OAuth provider to existing account
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          [providerIdField]: profile.id,
+          avatarUrl: profile.avatarUrl || user.avatarUrl,
+        },
+      });
+
+      return {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        companyId: user.companyId,
+        isNewUser: false,
+        needsCompanySetup: false,
+      };
+    }
+
+    // New user - create account with a temporary company
+    // They'll need to complete company setup on first login
+    const result = await this.prisma.$transaction(async (prisma) => {
+      // Create a temporary company for the user
+      const company = await prisma.company.create({
+        data: {
+          name: `${profile.firstName}'s Company`,
+          mode: 'FULL_ATS',
+        },
+      });
+
+      // Create the user
+      const newUser = await prisma.user.create({
+        data: {
+          email,
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          [providerIdField]: profile.id,
+          avatarUrl: profile.avatarUrl,
+          role: 'ADMIN',
+          companyId: company.id,
+        },
+        include: { company: true },
+      });
+
+      return newUser;
+    });
+
+    return {
+      id: result.id,
+      email: result.email,
+      firstName: result.firstName,
+      lastName: result.lastName,
+      role: result.role,
+      companyId: result.companyId,
+      isNewUser: true,
+      needsCompanySetup: true,
+    };
+  }
+
+  /**
+   * Generate tokens and response for OAuth callback
+   */
+  async handleOAuthCallback(user: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    role: string;
+    companyId: string;
+    isNewUser: boolean;
+    needsCompanySetup: boolean;
+  }) {
+    // Get full user with company info
+    const fullUser = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      include: { company: true },
+    });
+
+    if (!fullUser) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const tokens = await this.generateTokens(fullUser);
+
+    return {
+      user: {
+        id: fullUser.id,
+        email: fullUser.email,
+        firstName: fullUser.firstName,
+        lastName: fullUser.lastName,
+        role: fullUser.role,
+        avatarUrl: fullUser.avatarUrl,
+        company: {
+          id: fullUser.company.id,
+          name: fullUser.company.name,
+          mode: fullUser.company.mode,
+          plan: fullUser.company.plan,
+        },
+      },
+      isNewUser: user.isNewUser,
+      needsCompanySetup: user.needsCompanySetup,
+      ...tokens,
     };
   }
 }

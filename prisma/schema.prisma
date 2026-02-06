@@ -52,13 +52,18 @@ enum PlanType {
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
-  passwordHash String
+  passwordHash String?  // Optional for OAuth users
   firstName    String
   lastName     String
   role         UserRole @default(RECRUITER)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  // OAuth provider IDs
+  googleId    String?  @unique
+  microsoftId String?  @unique
+  avatarUrl   String?  // Profile picture from OAuth
 
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -71,6 +76,8 @@ model User {
   notifications        Notification[]
 
   @@index([companyId])
+  @@index([googleId])
+  @@index([microsoftId])
   @@map("users")
 }
 
