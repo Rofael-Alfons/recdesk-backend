@@ -67,7 +67,7 @@ export class UsersController {
     @Body() dto: InviteUserDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.usersService.invite(dto, user.companyId, user.role as UserRole);
+    return this.usersService.invite(dto, user.companyId, user.id, user.role as UserRole);
   }
 
   @Get(':id')

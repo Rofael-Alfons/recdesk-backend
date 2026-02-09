@@ -120,8 +120,16 @@ export default () => ({
   },
 
   sendgrid: {
-    apiKey: process.env.SENDGRID_API_KEY,
-    fromEmail: process.env.SENDGRID_FROM_EMAIL || 'noreply@recdesk.io',
+    apiKey:
+      process.env.NODE_ENV === 'production'
+        ? process.env.SENDGRID_API_KEY_PROD || process.env.SENDGRID_API_KEY
+        : process.env.SENDGRID_API_KEY,
+    fromEmail:
+      process.env.NODE_ENV === 'production'
+        ? process.env.SENDGRID_FROM_EMAIL_PROD ||
+          process.env.SENDGRID_FROM_EMAIL ||
+          'noreply@recdesk.io'
+        : process.env.SENDGRID_FROM_EMAIL || 'noreply@recdesk.io',
   },
 
   // Google (for Gmail email integration)
