@@ -3,12 +3,14 @@ import {
   UnauthorizedException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
+import { TransactionalEmailService } from '../email-sending/transactional-email.service';
 import {
   RegisterDto,
   LoginDto,
@@ -32,10 +34,13 @@ export type OAuthProvider = 'google' | 'microsoft';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private transactionalEmailService: TransactionalEmailService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -276,18 +281,36 @@ export class AuthService {
       },
     });
 
-    // TODO: Send email with reset link
-    // For now, log the token (in production, this would be sent via email only)
     const frontendUrl =
-      this.configService.get<string>('frontend.url') || 'http://localhost:3000';
-    const resetLink = `${frontendUrl}/auth/reset-password?token=${token}`;
+      this.configService.get<string>('frontend.url') || 'http://localhost:3001';
+    const resetLink = `${frontendUrl}/reset-password?token=${token}`;
 
-    console.log(`[DEV] Password reset link for ${user.email}: ${resetLink}`);
+    // Send password reset email via SendGrid (falls back to logging in dev)
+    const userName = user.firstName || user.email;
+    const emailResult =
+      await this.transactionalEmailService.sendPasswordResetEmail(
+        user.email,
+        resetLink,
+        userName,
+      );
+
+    if (!emailResult.success) {
+      this.logger.error(
+        `Failed to send password reset email to ${user.email}: ${emailResult.error}`,
+      );
+    }
+
+    // Also log in dev for convenience
+    if (process.env.NODE_ENV !== 'production') {
+      this.logger.debug(
+        `[DEV] Password reset link for ${user.email}: ${resetLink}`,
+      );
+    }
 
     return {
       message:
         'If an account exists with this email, a password reset link has been sent.',
-      // Only include in development
+      // Only include reset link in response during development
       ...(process.env.NODE_ENV !== 'production' && { resetLink }),
     };
   }

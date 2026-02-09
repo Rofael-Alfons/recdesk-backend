@@ -4,19 +4,24 @@ import {
   ForbiddenException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
+import { TransactionalEmailService } from '../email-sending/transactional-email.service';
 import { InviteUserDto, UpdateUserDto } from './dto';
 import { UserRole } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
+    private transactionalEmailService: TransactionalEmailService,
   ) {}
 
   async findAll(companyId: string) {
@@ -87,6 +92,7 @@ export class UsersService {
   async invite(
     dto: InviteUserDto,
     companyId: string,
+    requestingUserId: string,
     requestingUserRole: UserRole,
   ) {
     // Only admins can invite users
@@ -129,11 +135,35 @@ export class UsersService {
       },
     });
 
-    // TODO: Send invitation email with temporary password
-    // For now, return the temp password (in production, this would be sent via email only)
+    // Look up inviter name and company name for the invitation email
+    const inviter = await this.prisma.user.findUnique({
+      where: { id: requestingUserId },
+      select: { firstName: true, lastName: true, company: { select: { name: true } } },
+    });
+    const inviterName = inviter
+      ? `${inviter.firstName} ${inviter.lastName}`.trim()
+      : 'Your team admin';
+    const companyName = inviter?.company?.name || 'your company';
+
+    // Send invitation email via SendGrid (falls back to logging in dev)
+    const emailResult =
+      await this.transactionalEmailService.sendUserInvitationEmail(
+        user.email,
+        tempPassword,
+        inviterName,
+        companyName,
+      );
+
+    if (!emailResult.success) {
+      this.logger.error(
+        `Failed to send invitation email to ${user.email}: ${emailResult.error}`,
+      );
+    }
+
+    // Only include temp password in development (in prod it's sent via email only)
     return {
       user,
-      tempPassword, // This should only be returned in development
+      ...(process.env.NODE_ENV !== 'production' && { tempPassword }),
       message:
         'User invited successfully. They will receive an email with login instructions.',
     };

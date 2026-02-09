@@ -7,6 +7,7 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { MicrosoftStrategy } from './strategies/microsoft.strategy';
+import { EmailSendingModule } from '../email-sending/email-sending.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { MicrosoftStrategy } from './strategies/microsoft.strategy';
       }),
       inject: [ConfigService],
     }),
+    EmailSendingModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, GoogleStrategy, MicrosoftStrategy],
