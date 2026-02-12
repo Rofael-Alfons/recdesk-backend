@@ -134,11 +134,21 @@ export default () => ({
 
   // Google (for Gmail email integration)
   google: {
-    clientId: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    clientId:
+      process.env.NODE_ENV === 'production'
+        ? process.env.GOOGLE_CLIENT_ID_PROD || process.env.GOOGLE_CLIENT_ID
+        : process.env.GOOGLE_CLIENT_ID,
+    clientSecret:
+      process.env.NODE_ENV === 'production'
+        ? process.env.GOOGLE_CLIENT_SECRET_PROD ||
+          process.env.GOOGLE_CLIENT_SECRET
+        : process.env.GOOGLE_CLIENT_SECRET,
     redirectUri:
-      process.env.GOOGLE_REDIRECT_URI ||
-      'http://localhost:3000/api/integrations/gmail/callback',
+      process.env.NODE_ENV === 'production'
+        ? process.env.GOOGLE_REDIRECT_URI_PROD ||
+          'https://api.recdesk.io/api/integrations/gmail/callback'
+        : process.env.GOOGLE_REDIRECT_URI ||
+          'http://localhost:3000/api/integrations/gmail/callback',
     // Gmail Pub/Sub push notifications (dual dev/prod)
     pubsubTopic:
       process.env.NODE_ENV === 'production'
