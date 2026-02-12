@@ -356,10 +356,12 @@ model EmailConnection {
   expiresAt     DateTime?
   isActive      Boolean             @default(true)
   autoImport    Boolean             @default(true)  // Auto-import job application emails
-  lastSyncAt    DateTime?
-  lastHistoryId String?             // Gmail history ID for incremental sync
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  lastSyncAt       DateTime?
+  lastHistoryId    String?             // Gmail history ID for incremental sync
+  watchExpiration  DateTime?           // When the Gmail Pub/Sub watch expires (max 7 days)
+  watchHistoryId   String?             // historyId returned by Gmail watch() call
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
 
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)

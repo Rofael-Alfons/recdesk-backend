@@ -139,7 +139,17 @@ export default () => ({
     redirectUri:
       process.env.GOOGLE_REDIRECT_URI ||
       'http://localhost:3000/api/integrations/gmail/callback',
-    pubsubTopic: process.env.GOOGLE_PUBSUB_TOPIC,
+    // Gmail Pub/Sub push notifications (dual dev/prod)
+    pubsubTopic:
+      process.env.NODE_ENV === 'production'
+        ? process.env.GOOGLE_PUBSUB_TOPIC_PROD ||
+          process.env.GOOGLE_PUBSUB_TOPIC
+        : process.env.GOOGLE_PUBSUB_TOPIC,
+    pubsubVerificationToken:
+      process.env.NODE_ENV === 'production'
+        ? process.env.GMAIL_PUBSUB_VERIFICATION_TOKEN_PROD ||
+          process.env.GMAIL_PUBSUB_VERIFICATION_TOKEN
+        : process.env.GMAIL_PUBSUB_VERIFICATION_TOKEN,
   },
 
   // Google OAuth (for user authentication)
