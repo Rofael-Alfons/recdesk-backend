@@ -3,6 +3,7 @@ import {
   BadRequestException,
   NotFoundException,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { google } from 'googleapis';
@@ -11,6 +12,7 @@ import { EmailProvider } from '@prisma/client';
 
 @Injectable()
 export class IntegrationsService {
+  private readonly logger = new Logger(IntegrationsService.name);
   private oauth2Client;
 
   constructor(
@@ -94,6 +96,8 @@ export class IntegrationsService {
         },
       });
 
+      let connectionId: string;
+
       if (existingConnection) {
         // Update existing connection
         await this.prisma.emailConnection.update({
@@ -106,9 +110,10 @@ export class IntegrationsService {
             isActive: true,
           },
         });
+        connectionId = existingConnection.id;
       } else {
         // Create new connection
-        await this.prisma.emailConnection.create({
+        const newConnection = await this.prisma.emailConnection.create({
           data: {
             provider: EmailProvider.GMAIL,
             email: userInfo.email,
@@ -119,11 +124,13 @@ export class IntegrationsService {
             companyId,
           },
         });
+        connectionId = newConnection.id;
       }
 
       return {
         success: true,
         email: userInfo.email,
+        connectionId,
         message: 'Gmail connected successfully',
       };
     } catch (error) {
@@ -165,7 +172,7 @@ export class IntegrationsService {
         await this.oauth2Client.revokeToken(connection.accessToken);
       } catch (error) {
         // Token might already be revoked, continue with deletion
-        console.warn('Failed to revoke token:', error);
+        this.logger.warn('Failed to revoke token:', error);
       }
     }
 

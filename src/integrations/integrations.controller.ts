@@ -8,6 +8,10 @@ import {
   Body,
   ParseUUIDPipe,
   Res,
+  Logger,
+  Optional,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -17,6 +21,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { IntegrationsService } from './integrations.service';
+import { GmailPubsubService } from '../email-monitor/gmail-pubsub.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserData } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
@@ -29,9 +34,14 @@ import { UpdateConnectionDto } from './dto/update-connection.dto';
 @ApiBearerAuth()
 @Controller('integrations')
 export class IntegrationsController {
+  private readonly logger = new Logger(IntegrationsController.name);
+
   constructor(
     private integrationsService: IntegrationsService,
     private configService: ConfigService,
+    @Optional()
+    @Inject(forwardRef(() => GmailPubsubService))
+    private gmailPubsubService?: GmailPubsubService,
   ) {}
 
   @Get()
@@ -77,6 +87,19 @@ export class IntegrationsController {
         code,
         state,
       );
+
+      // Set up Gmail Pub/Sub watch for real-time push notifications
+      if (result.connectionId && this.gmailPubsubService?.isEnabled()) {
+        this.gmailPubsubService
+          .watchMailbox(result.connectionId)
+          .catch((err) => {
+            this.logger.error(
+              `Failed to set up Gmail watch for connection ${result.connectionId}:`,
+              err,
+            );
+          });
+      }
+
       return res.redirect(
         `${frontendUrl}/integrations?success=true&email=${encodeURIComponent(result.email)}`,
       );
@@ -114,6 +137,18 @@ export class IntegrationsController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: CurrentUserData,
   ) {
+    // Stop Gmail Pub/Sub watch before disconnecting
+    if (this.gmailPubsubService) {
+      try {
+        await this.gmailPubsubService.stopWatch(id);
+      } catch (err) {
+        this.logger.warn(
+          `Failed to stop Gmail watch during disconnect for connection ${id}:`,
+          err,
+        );
+      }
+    }
+
     return this.integrationsService.disconnectEmail(id, user.companyId);
   }
 }
