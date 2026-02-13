@@ -115,6 +115,10 @@ export class EmailMonitorService {
         await this.integrationsService.getValidAccessToken(connectionId);
       this.oauth2Client.setCredentials({ access_token: accessToken });
 
+      this.logger.log(
+        `Polling emails for ${connection.email} (connection: ${connectionId}, lastHistoryId: ${connection.lastHistoryId || 'none'}, token: ${accessToken ? accessToken.substring(0, 10) + '...' : 'MISSING'})`,
+      );
+
       const gmail = google.gmail({ version: 'v1', auth: this.oauth2Client });
 
       // Fetch new emails
@@ -283,8 +287,16 @@ export class EmailMonitorService {
       });
 
       return response.data as GmailMessage;
-    } catch (error) {
-      this.logger.error(`Failed to get message ${messageId}:`, error);
+    } catch (error: any) {
+      const errorCode =
+        error?.response?.data?.error?.code || error?.code || 'N/A';
+      const errorMessage =
+        error?.response?.data?.error?.message ||
+        error?.message ||
+        'Unknown error';
+      this.logger.error(
+        `Failed to get message ${messageId}: [${errorCode}] ${errorMessage}`,
+      );
       return null;
     }
   }
