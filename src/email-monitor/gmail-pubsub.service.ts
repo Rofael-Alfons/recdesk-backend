@@ -158,7 +158,7 @@ export class GmailPubsubService {
             watchHistoryId: null,
           },
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   }
 
