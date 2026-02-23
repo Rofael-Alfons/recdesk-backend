@@ -70,7 +70,6 @@ export class EmailClassificationProcessor {
           isJobApplication: classification.isJobApplication,
           confidence: classification.confidence,
           detectedPosition: classification.detectedPosition,
-          bodyText,
           status: 'PENDING',
           emailConnectionId,
         },
@@ -100,6 +99,8 @@ export class EmailClassificationProcessor {
           data: {
             status: 'IMPORTED',
             processedAt: new Date(),
+            bodyText: null,
+            bodyHtml: null,
           },
         });
       } else if (!classification.isJobApplication) {
@@ -108,6 +109,8 @@ export class EmailClassificationProcessor {
           data: {
             status: 'SKIPPED',
             processedAt: new Date(),
+            bodyText: null,
+            bodyHtml: null,
           },
         });
       }

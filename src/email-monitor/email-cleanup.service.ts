@@ -36,4 +36,36 @@ export class EmailCleanupService {
       this.logger.error('Failed to cleanup old skipped emails:', error);
     }
   }
+
+  /**
+   * Safety net: purge any lingering email body content from records older than 1 hour.
+   * Catches edge cases where processing was interrupted before the normal purge ran.
+   */
+  @Cron('0 */6 * * *')
+  async purgeLingeringEmailBodies() {
+    this.logger.log('Starting safety-net purge of lingering email bodies...');
+
+    const cutoff = new Date(Date.now() - 60 * 60 * 1000);
+
+    try {
+      const result = await this.prisma.emailImport.updateMany({
+        where: {
+          createdAt: { lt: cutoff },
+          OR: [
+            { bodyText: { not: null } },
+            { bodyHtml: { not: null } },
+          ],
+        },
+        data: { bodyText: null, bodyHtml: null },
+      });
+
+      if (result.count > 0) {
+        this.logger.log(
+          `Purged email body content from ${result.count} lingering records`,
+        );
+      }
+    } catch (error) {
+      this.logger.error('Failed to purge lingering email bodies:', error);
+    }
+  }
 }

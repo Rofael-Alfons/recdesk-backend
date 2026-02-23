@@ -8,6 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { google } from 'googleapis';
 import { PrismaService } from '../prisma/prisma.service';
+import { EncryptionService } from '../common/encryption.service';
 import { EmailProvider } from '@prisma/client';
 
 @Injectable()
@@ -18,6 +19,7 @@ export class IntegrationsService {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
+    private encryptionService: EncryptionService,
   ) {
     const clientId = this.configService.get<string>('google.clientId');
     const clientSecret = this.configService.get<string>('google.clientSecret');
@@ -98,14 +100,19 @@ export class IntegrationsService {
 
       let connectionId: string;
 
+      const encryptedAccessToken = this.encryptionService.encrypt(tokens.access_token);
+      const encryptedRefreshToken = tokens.refresh_token
+        ? this.encryptionService.encrypt(tokens.refresh_token)
+        : null;
+
       if (existingConnection) {
         // Update existing connection
         await this.prisma.emailConnection.update({
           where: { id: existingConnection.id },
           data: {
-            accessToken: tokens.access_token,
+            accessToken: encryptedAccessToken,
             refreshToken:
-              tokens.refresh_token || existingConnection.refreshToken,
+              encryptedRefreshToken || existingConnection.refreshToken,
             expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
             isActive: true,
           },
@@ -117,8 +124,8 @@ export class IntegrationsService {
           data: {
             provider: EmailProvider.GMAIL,
             email: userInfo.email,
-            accessToken: tokens.access_token,
-            refreshToken: tokens.refresh_token || null,
+            accessToken: encryptedAccessToken,
+            refreshToken: encryptedRefreshToken,
             expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
             isActive: true,
             companyId,
@@ -169,7 +176,8 @@ export class IntegrationsService {
     // Revoke tokens if possible
     if (connection.accessToken) {
       try {
-        await this.oauth2Client.revokeToken(connection.accessToken);
+        const plainToken = this.encryptionService.decrypt(connection.accessToken);
+        await this.oauth2Client.revokeToken(plainToken);
       } catch (error) {
         // Token might already be revoked, continue with deletion
         this.logger.warn('Failed to revoke token:', error);
@@ -195,8 +203,9 @@ export class IntegrationsService {
     }
 
     try {
+      const plainRefreshToken = this.encryptionService.decrypt(connection.refreshToken);
       this.oauth2Client.setCredentials({
-        refresh_token: connection.refreshToken,
+        refresh_token: plainRefreshToken,
       });
 
       const { credentials } = await this.oauth2Client.refreshAccessToken();
@@ -204,7 +213,7 @@ export class IntegrationsService {
       await this.prisma.emailConnection.update({
         where: { id: connectionId },
         data: {
-          accessToken: credentials.access_token!,
+          accessToken: this.encryptionService.encrypt(credentials.access_token!),
           expiresAt: credentials.expiry_date
             ? new Date(credentials.expiry_date)
             : null,
@@ -245,7 +254,7 @@ export class IntegrationsService {
       return this.refreshAccessToken(connectionId);
     }
 
-    return connection.accessToken;
+    return this.encryptionService.decrypt(connection.accessToken);
   }
 
   async updateConnection(

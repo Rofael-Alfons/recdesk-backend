@@ -158,6 +158,7 @@ export class QueueModule {
                   type: 'exponential',
                   delay: 2000,
                 },
+                timeout: 120000, // 2 minute timeout per job
                 removeOnComplete: 100,
                 removeOnFail: 50,
               },
