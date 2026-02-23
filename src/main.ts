@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { Logger, LoggerErrorInterceptor } from 'nestjs-pino';
 import helmet from 'helmet';
+import { Request, Response, NextFunction } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -18,6 +19,26 @@ async function bootstrap() {
   app.useGlobalInterceptors(new LoggerErrorInterceptor());
 
   const configService = app.get(ConfigService);
+
+  // Block malicious path probes (scanners looking for .env, secrets, etc.)
+  // Applied early to reject before any NestJS processing
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const url = req.url.toLowerCase();
+    if (
+      url.includes('.env') ||
+      url.includes('secrets.yml') ||
+      url.includes('config.json') ||
+      url.includes('.git/') ||
+      url.includes('wp-admin') ||
+      url.includes('wp-login') ||
+      url.includes('phpmy') ||
+      url.includes('.php')
+    ) {
+      res.status(403).end();
+      return;
+    }
+    next();
+  });
 
   // Security headers with Helmet
   app.use(
