@@ -211,6 +211,7 @@ export class EmailMonitorService {
           userId: 'me',
           startHistoryId: lastHistoryId,
           historyTypes: ['messageAdded'],
+          labelId: 'INBOX',
         });
 
         const messageIds = new Set<string>();
@@ -309,6 +310,14 @@ export class EmailMonitorService {
     connection: any,
     message: GmailMessage,
   ): Promise<{ imported: boolean }> {
+    // Skip messages not in INBOX (e.g., SENT, DRAFT, SPAM)
+    if (!message.labelIds || !message.labelIds.includes('INBOX')) {
+      this.logger.log(
+        `Email ${message.id} not in INBOX (labels: ${message.labelIds?.join(', ')}), skipping`,
+      );
+      return { imported: false };
+    }
+
     // Check if already processed
     const existingImport = await this.prisma.emailImport.findUnique({
       where: { messageId: message.id },
@@ -325,6 +334,14 @@ export class EmailMonitorService {
 
     const senderEmail = this.extractEmail(from);
     const senderName = this.extractName(from);
+
+    // Skip emails sent BY the connected account (outgoing emails)
+    if (senderEmail.toLowerCase() === connection.email.toLowerCase()) {
+      this.logger.log(
+        `Email ${message.id} sent by connected account ${connection.email}, skipping`,
+      );
+      return { imported: false };
+    }
 
     // Extract attachments early for prefilter
     const attachments = await this.extractAttachments(gmail, message);
@@ -482,6 +499,8 @@ export class EmailMonitorService {
           data: {
             status: 'IMPORTED',
             processedAt: new Date(),
+            bodyText: null,
+            bodyHtml: null,
           },
         });
 
@@ -501,6 +520,8 @@ export class EmailMonitorService {
             errorMessage:
               error instanceof Error ? error.message : 'Unknown error',
             processedAt: new Date(),
+            bodyText: null,
+            bodyHtml: null,
           },
         });
         throw error;
@@ -515,6 +536,8 @@ export class EmailMonitorService {
           skipReason: classification.isJobApplication
             ? `Low confidence (${classification.confidence}%)`
             : 'AI determined not a job application',
+          bodyText: null,
+          bodyHtml: null,
         },
       });
       return { imported: false };

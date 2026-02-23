@@ -1,19 +1,25 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EmailMonitorService } from './email-monitor.service';
 import { GmailPubsubService } from './gmail-pubsub.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
-export class EmailMonitorScheduler {
+export class EmailMonitorScheduler implements OnModuleDestroy {
   private readonly logger = new Logger(EmailMonitorScheduler.name);
   private isRunning = false;
+  private isShuttingDown = false;
 
   constructor(
     private emailMonitorService: EmailMonitorService,
     private gmailPubsubService: GmailPubsubService,
     private prisma: PrismaService,
   ) {}
+
+  onModuleDestroy() {
+    this.logger.log('Shutting down email monitor scheduler...');
+    this.isShuttingDown = true;
+  }
 
   /**
    * Poll email connections every 5 minutes (FALLBACK ONLY).
@@ -28,6 +34,11 @@ export class EmailMonitorScheduler {
    */
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleEmailPolling() {
+    if (this.isShuttingDown) {
+      this.logger.log('Shutdown in progress, skipping email polling');
+      return;
+    }
+
     if (this.isRunning) {
       this.logger.warn('Previous polling job still running, skipping...');
       return;

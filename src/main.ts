@@ -131,9 +131,17 @@ async function bootstrap() {
     }
   }
 
+  // Enable graceful shutdown hooks (SIGTERM/SIGINT cleanup)
+  app.enableShutdownHooks();
+
   // Start server
   const port = configService.get<number>('port') || 3000;
-  await app.listen(port);
+  const server = await app.listen(port);
+
+  // Set request/connection timeouts to prevent hanging connections
+  server.setTimeout(60000); // 60s request timeout
+  server.keepAliveTimeout = 65000; // slightly above load balancer timeout
+  server.headersTimeout = 66000; // slightly above keepAliveTimeout
 
   logger.log(`RecDesk AI Backend running on: http://localhost:${port}`);
   if (!isProduction) {

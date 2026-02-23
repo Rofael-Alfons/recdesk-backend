@@ -29,7 +29,7 @@ export class HealthController {
     return this.health.check([
       () => this.db.isHealthy('database'),
       () => this.redis.isHealthy('redis'),
-      () => this.memory.checkHeap('memory_heap', 150 * 1024 * 1024), // 150MB
+      () => this.memory.checkHeap('memory_heap', 512 * 1024 * 1024), // 512MB
     ]);
   }
 

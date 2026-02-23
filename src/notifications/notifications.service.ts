@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { Subject, Observable, filter, map } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationType, Prisma } from '@prisma/client';
@@ -15,11 +15,16 @@ interface SSEEvent {
 }
 
 @Injectable()
-export class NotificationsService {
+export class NotificationsService implements OnModuleDestroy {
   private readonly logger = new Logger(NotificationsService.name);
   private readonly notificationSubject = new Subject<SSEEvent>();
 
   constructor(private prisma: PrismaService) {}
+
+  onModuleDestroy() {
+    this.logger.log('Completing notification subject, closing SSE connections...');
+    this.notificationSubject.complete();
+  }
 
   /**
    * Create a new notification and emit it via SSE
