@@ -180,6 +180,36 @@ export default () => ({
           'http://localhost:3000/api/auth/google/callback',
   },
 
+  // Microsoft Email Integration (Outlook via Graph API)
+  microsoftEmail: {
+    clientId:
+      process.env.NODE_ENV === 'production'
+        ? process.env.MICROSOFT_EMAIL_CLIENT_ID_PROD ||
+          process.env.MICROSOFT_EMAIL_CLIENT_ID
+        : process.env.MICROSOFT_EMAIL_CLIENT_ID,
+    clientSecret:
+      process.env.NODE_ENV === 'production'
+        ? process.env.MICROSOFT_EMAIL_CLIENT_SECRET_PROD ||
+          process.env.MICROSOFT_EMAIL_CLIENT_SECRET
+        : process.env.MICROSOFT_EMAIL_CLIENT_SECRET,
+    redirectUri:
+      process.env.NODE_ENV === 'production'
+        ? process.env.MICROSOFT_EMAIL_REDIRECT_URI_PROD ||
+          'https://api.recdesk.io/api/integrations/outlook/callback'
+        : process.env.MICROSOFT_EMAIL_REDIRECT_URI ||
+          'http://localhost:3000/api/integrations/outlook/callback',
+    webhookUrl:
+      process.env.NODE_ENV === 'production'
+        ? process.env.MICROSOFT_EMAIL_WEBHOOK_URL_PROD ||
+          process.env.MICROSOFT_EMAIL_WEBHOOK_URL
+        : process.env.MICROSOFT_EMAIL_WEBHOOK_URL,
+    webhookSecret:
+      process.env.NODE_ENV === 'production'
+        ? process.env.MICROSOFT_EMAIL_WEBHOOK_SECRET_PROD ||
+          process.env.MICROSOFT_EMAIL_WEBHOOK_SECRET
+        : process.env.MICROSOFT_EMAIL_WEBHOOK_SECRET,
+  },
+
   // Microsoft OAuth (for user authentication)
   microsoft: {
     clientId:
@@ -221,5 +251,10 @@ export default () => ({
     enabled: process.env.PREFILTER_ENABLED !== 'false', // Default: true
     autoClassifyEnabled:
       process.env.PREFILTER_AUTO_CLASSIFY_ENABLED !== 'false', // Default: true
+  },
+
+  waitlist: {
+    welcomeEmailEnabled:
+      process.env.WAITLIST_WELCOME_EMAIL_ENABLED !== 'false', // Default: true
   },
 });

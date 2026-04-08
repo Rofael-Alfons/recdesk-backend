@@ -1,19 +1,24 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, Optional } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EmailMonitorService } from './email-monitor.service';
 import { GmailPubsubService } from './gmail-pubsub.service';
+import { OutlookMonitorService } from './outlook-monitor.service';
+import { OutlookGraphService } from './outlook-graph.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class EmailMonitorScheduler implements OnModuleDestroy {
   private readonly logger = new Logger(EmailMonitorScheduler.name);
   private isRunning = false;
+  private isOutlookRunning = false;
   private isShuttingDown = false;
 
   constructor(
     private emailMonitorService: EmailMonitorService,
     private gmailPubsubService: GmailPubsubService,
     private prisma: PrismaService,
+    @Optional() private outlookMonitorService?: OutlookMonitorService,
+    @Optional() private outlookGraphService?: OutlookGraphService,
   ) {}
 
   onModuleDestroy() {
@@ -22,15 +27,11 @@ export class EmailMonitorScheduler implements OnModuleDestroy {
   }
 
   /**
-   * Poll email connections every 5 minutes (FALLBACK ONLY).
+   * Poll Gmail connections every 5 minutes (FALLBACK ONLY).
    *
    * When Gmail Pub/Sub push notifications are active, connections with
    * a valid watchExpiration are skipped since they receive real-time pushes.
    * Only connections WITHOUT an active watch are polled.
-   *
-   * This serves as a safety net per Google's recommendation:
-   * "Make sure to handle this possibility gracefully, so that the application
-   * still syncs even if no push messages are received."
    */
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleEmailPolling() {
@@ -45,10 +46,9 @@ export class EmailMonitorScheduler implements OnModuleDestroy {
     }
 
     this.isRunning = true;
-    this.logger.log('Starting scheduled email polling (fallback)...');
+    this.logger.log('Starting scheduled Gmail polling (fallback)...');
 
     try {
-      // Only poll companies that have had user activity in the last hour
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
       const now = new Date();
 
@@ -56,13 +56,12 @@ export class EmailMonitorScheduler implements OnModuleDestroy {
         where: {
           isActive: true,
           autoImport: true,
+          provider: 'GMAIL',
           company: {
             lastActivityAt: {
               gte: oneHourAgo,
             },
           },
-          // Only poll connections that do NOT have an active Pub/Sub watch.
-          // Connections with an active watch receive real-time push notifications.
           OR: [
             { watchExpiration: null },
             { watchExpiration: { lt: now } },
@@ -74,33 +73,105 @@ export class EmailMonitorScheduler implements OnModuleDestroy {
       });
 
       this.logger.log(
-        `Found ${connections.length} active email connections without push (from active companies) to poll`,
+        `Found ${connections.length} active Gmail connections without push to poll`,
       );
 
-      // Process each connection
       for (const connection of connections) {
         try {
           await this.emailMonitorService.pollEmailsForConnection(connection.id);
         } catch (error) {
           this.logger.error(
-            `Failed to poll emails for connection ${connection.id} (${connection.email}):`,
+            `Failed to poll emails for Gmail connection ${connection.id} (${connection.email}):`,
             error,
           );
         }
       }
 
-      this.logger.log('Completed scheduled email polling (fallback)');
+      this.logger.log('Completed scheduled Gmail polling (fallback)');
     } catch (error) {
-      this.logger.error('Failed during email polling job:', error);
+      this.logger.error('Failed during Gmail polling job:', error);
     } finally {
       this.isRunning = false;
     }
   }
 
   /**
+   * Poll Outlook connections every 5 minutes (FALLBACK ONLY).
+   *
+   * When Graph change notifications are active, connections with
+   * a valid graphSubscriptionId + watchExpiration are skipped.
+   * Only connections WITHOUT an active subscription are polled.
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async handleOutlookPolling() {
+    if (this.isShuttingDown || !this.outlookMonitorService) {
+      return;
+    }
+
+    if (this.isOutlookRunning) {
+      this.logger.warn(
+        'Previous Outlook polling job still running, skipping...',
+      );
+      return;
+    }
+
+    this.isOutlookRunning = true;
+    this.logger.log('Starting scheduled Outlook polling (fallback)...');
+
+    try {
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const now = new Date();
+
+      const connections = await this.prisma.emailConnection.findMany({
+        where: {
+          isActive: true,
+          autoImport: true,
+          provider: 'OUTLOOK',
+          company: {
+            lastActivityAt: {
+              gte: oneHourAgo,
+            },
+          },
+          // Only poll connections without active Graph subscription
+          OR: [
+            { graphSubscriptionId: null },
+            { watchExpiration: null },
+            { watchExpiration: { lt: now } },
+          ],
+        },
+        include: {
+          company: true,
+        },
+      });
+
+      this.logger.log(
+        `Found ${connections.length} active Outlook connections without push to poll`,
+      );
+
+      for (const connection of connections) {
+        try {
+          await this.outlookMonitorService.pollEmailsForConnection(
+            connection.id,
+          );
+        } catch (error) {
+          this.logger.error(
+            `Failed to poll emails for Outlook connection ${connection.id} (${connection.email}):`,
+            error,
+          );
+        }
+      }
+
+      this.logger.log('Completed scheduled Outlook polling (fallback)');
+    } catch (error) {
+      this.logger.error('Failed during Outlook polling job:', error);
+    } finally {
+      this.isOutlookRunning = false;
+    }
+  }
+
+  /**
    * Renew Gmail Pub/Sub watches daily at 2 AM.
    * Watches expire every 7 days; renewing daily with a 2-day buffer ensures no gap.
-   * Also sets up watches for connections that should have one but don't.
    */
   @Cron('0 2 * * *')
   async handleWatchRenewal() {
@@ -114,19 +185,44 @@ export class EmailMonitorScheduler implements OnModuleDestroy {
       await this.gmailPubsubService.renewExpiringWatches();
       this.logger.log('Completed daily Gmail Pub/Sub watch renewal');
     } catch (error) {
-      this.logger.error('Failed during watch renewal job:', error);
+      this.logger.error('Failed during Gmail watch renewal job:', error);
     }
   }
 
   /**
-   * Check for connections that need token refresh (every 30 minutes)
+   * Renew Graph change notification subscriptions every 12 hours.
+   * Subscriptions expire in ~2.9 days; renewing every 12h gives ample buffer.
+   */
+  @Cron('0 */12 * * *')
+  async handleOutlookSubscriptionRenewal() {
+    if (!this.outlookGraphService?.isEnabled()) {
+      return;
+    }
+
+    this.logger.log(
+      'Starting Outlook Graph subscription renewal...',
+    );
+
+    try {
+      await this.outlookGraphService.renewExpiringSubscriptions();
+      this.logger.log('Completed Outlook Graph subscription renewal');
+    } catch (error) {
+      this.logger.error(
+        'Failed during Outlook subscription renewal job:',
+        error,
+      );
+    }
+  }
+
+  /**
+   * Check for connections that need token refresh (every 30 minutes).
+   * Dispatches to the correct refresh method based on provider.
    */
   @Cron(CronExpression.EVERY_30_MINUTES)
   async handleTokenRefresh() {
     this.logger.log('Checking for tokens that need refresh...');
 
     try {
-      // Find connections with tokens expiring in the next hour
       const oneHourFromNow = new Date(Date.now() + 60 * 60 * 1000);
 
       const expiringConnections = await this.prisma.emailConnection.findMany({
@@ -147,8 +243,21 @@ export class EmailMonitorScheduler implements OnModuleDestroy {
 
       for (const connection of expiringConnections) {
         try {
-          await this.emailMonitorService.refreshConnectionToken(connection.id);
-          this.logger.log(`Refreshed token for connection ${connection.id}`);
+          if (
+            connection.provider === 'OUTLOOK' &&
+            this.outlookMonitorService
+          ) {
+            await this.outlookMonitorService.refreshConnectionToken(
+              connection.id,
+            );
+          } else {
+            await this.emailMonitorService.refreshConnectionToken(
+              connection.id,
+            );
+          }
+          this.logger.log(
+            `Refreshed token for ${connection.provider} connection ${connection.id}`,
+          );
         } catch (error) {
           this.logger.error(
             `Failed to refresh token for connection ${connection.id}:`,

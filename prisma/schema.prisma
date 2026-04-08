@@ -356,10 +356,11 @@ model EmailConnection {
   expiresAt     DateTime?
   isActive      Boolean             @default(true)
   autoImport    Boolean             @default(true)  // Auto-import job application emails
-  lastSyncAt       DateTime?
-  lastHistoryId    String?             // Gmail history ID for incremental sync
-  watchExpiration  DateTime?           // When the Gmail Pub/Sub watch expires (max 7 days)
-  watchHistoryId   String?             // historyId returned by Gmail watch() call
+  lastSyncAt          DateTime?
+  lastHistoryId       String?          // Gmail history ID / Outlook delta link token
+  watchExpiration     DateTime?        // Gmail Pub/Sub watch expiry / Graph subscription expiry
+  watchHistoryId      String?          // historyId returned by Gmail watch() call
+  graphSubscriptionId String?          // Microsoft Graph change notification subscription ID
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
 
@@ -631,4 +632,23 @@ model UsageAlertTracker {
 
   @@unique([companyId, periodStart])
   @@map("usage_alert_trackers")
+}
+
+// ============================================
+// WAITLIST
+// ============================================
+
+model WaitlistSubscriber {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String?
+  source       String?  @default("website")
+  referralCode String?  @unique
+  referredBy   String?
+  ipAddress    String?
+  userAgent    String?
+  subscribedAt DateTime @default(now())
+
+  @@index([subscribedAt])
+  @@map("waitlist_subscribers")
 }
