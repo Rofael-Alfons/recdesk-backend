@@ -52,6 +52,21 @@ export class TransactionalEmailService {
   }
 
   /**
+   * Send a waitlist welcome/confirmation email.
+   */
+  async sendWaitlistWelcomeEmail(
+    email: string,
+    name: string,
+    position: number,
+  ): Promise<{ success: boolean; error?: string }> {
+    const subject = "You're on the RecDesk waitlist!";
+    const html = this.buildWaitlistWelcomeHtml(name, position);
+    const text = this.buildWaitlistWelcomeText(name, position);
+
+    return this.send(email, subject, html, text);
+  }
+
+  /**
    * Send a user invitation email with login credentials.
    */
   async sendUserInvitationEmail(
@@ -136,6 +151,46 @@ export class TransactionalEmailService {
         <tr>
           <td style="background-color:#1E40AF;padding:24px 32px;">
             <span style="color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.5px;">RecDesk</span>
+          </td>
+        </tr>
+        <!-- Body -->
+        <tr>
+          <td style="padding:32px;color:#1E293B;font-size:15px;line-height:1.6;">
+            ${content}
+          </td>
+        </tr>
+        <!-- Footer -->
+        <tr>
+          <td style="padding:20px 32px;background-color:#F8FAFC;border-top:1px solid #E2E8F0;color:#94A3B8;font-size:12px;text-align:center;">
+            &copy; ${new Date().getFullYear()} RecDesk AI &mdash; Hiring Intelligence Platform
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+  }
+
+  private baseWrapperWithLogo(content: string, logoUrl: string): string {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#F1F5F9;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F1F5F9;padding:40px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <!-- Header with Logo -->
+        <tr>
+          <td style="background-color:#1E40AF;padding:24px 32px;">
+            <table cellpadding="0" cellspacing="0"><tr>
+              <td style="vertical-align:middle;padding-right:12px;">
+                <img src="${logoUrl}" alt="RecDesk" width="36" height="36" style="display:block;border-radius:8px;" />
+              </td>
+              <td style="vertical-align:middle;">
+                <span style="color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.5px;">RecDesk</span>
+              </td>
+            </tr></table>
           </td>
         </tr>
         <!-- Body -->
@@ -245,6 +300,44 @@ export class TransactionalEmailService {
       'We recommend changing your password after your first login.',
       '',
       '-- RecDesk AI',
+    ].join('\n');
+  }
+
+  private buildWaitlistWelcomeHtml(name: string, position: number): string {
+    const logoUrl = `https://recdesk.io/logos/logo-solid.png`;
+    const content = `
+      <p style="margin:0 0 16px;">Hi,</p>
+      <p style="margin:0 0 16px;">Thanks for joining the RecDesk waitlist!</p>
+      <p style="margin:0 0 16px;">RecDesk automatically captures CVs from your email, scores every candidate with AI, and gives you a shortlist in minutes &mdash; not days. Built for companies hiring in Egypt and the MENA region.</p>
+      <p style="margin:0 0 8px;font-weight:600;">What to expect:</p>
+      <ul style="margin:0 0 16px;padding-left:20px;color:#475569;">
+        <li style="margin-bottom:6px;">Early access invitation before public launch</li>
+        <li style="margin-bottom:6px;">Extended free plan for early adopters</li>
+        <li style="margin-bottom:6px;">Priority onboarding &amp; support</li>
+      </ul>
+      <p style="margin:0 0 16px;">We'll only email you with launch updates &mdash; no spam, ever.</p>
+      <p style="margin:0;color:#64748B;font-size:13px;">&mdash; The RecDesk Team</p>`;
+
+    return this.baseWrapperWithLogo(content, logoUrl);
+  }
+
+  private buildWaitlistWelcomeText(name: string, position: number): string {
+    return [
+      `Hi ${name},`,
+      '',
+      `Thanks for joining the RecDesk waitlist! You're #${position} in line.`,
+      '',
+      'RecDesk automatically captures CVs from your email, scores every',
+      'candidate with AI, and gives you a shortlist in minutes — not days.',
+      '',
+      'What to expect:',
+      '- Early access invitation before public launch',
+      '- Extended free plan for early adopters',
+      '- Priority onboarding & support',
+      '',
+      "We'll only email you with launch updates — no spam, ever.",
+      '',
+      '— The RecDesk Team',
     ].join('\n');
   }
 }

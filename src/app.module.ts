@@ -22,6 +22,7 @@ import { EmailTemplatesModule } from './email-templates/email-templates.module';
 import { EmailSendingModule } from './email-sending/email-sending.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { HealthModule } from './health/health.module';
+import { WaitlistModule } from './waitlist/waitlist.module';
 import { CacheModule } from './cache/cache.module';
 import { StorageModule } from './storage/storage.module';
 import { CommonModule } from './common/common.module';
@@ -95,6 +96,7 @@ import configuration from './config/configuration';
     EmailTemplatesModule,
     EmailSendingModule,
     NotificationsModule,
+    WaitlistModule,
     // QueueModule with graceful degradation - provides NoOpQueueService when Redis unavailable
     QueueModule.forRoot(),
   ],

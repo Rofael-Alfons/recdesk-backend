@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { google } from 'googleapis';
+import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 import { EncryptionService } from '../common/encryption.service';
 import { EmailProvider } from '@prisma/client';
@@ -31,6 +32,10 @@ export class IntegrationsService {
       redirectUri,
     );
   }
+
+  // ==========================================
+  // GMAIL
+  // ==========================================
 
   async getGmailAuthUrl(companyId: string, userId: string) {
     const state = Buffer.from(JSON.stringify({ companyId, userId })).toString(
@@ -146,6 +151,241 @@ export class IntegrationsService {
     }
   }
 
+  // ==========================================
+  // OUTLOOK
+  // ==========================================
+
+  async getOutlookAuthUrl(companyId: string, userId: string) {
+    const clientId = this.configService.get<string>('microsoftEmail.clientId');
+    if (!clientId) {
+      throw new BadRequestException('Outlook email integration is not configured');
+    }
+
+    const redirectUri = this.configService.get<string>('microsoftEmail.redirectUri') || '';
+
+    const state = Buffer.from(JSON.stringify({ companyId, userId })).toString(
+      'base64',
+    );
+
+    const scopes = ['Mail.Read', 'User.Read', 'offline_access'];
+
+    const params = new URLSearchParams({
+      client_id: clientId,
+      response_type: 'code',
+      redirect_uri: redirectUri,
+      response_mode: 'query',
+      scope: scopes.join(' '),
+      state,
+      prompt: 'consent',
+    });
+
+    const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params.toString()}`;
+
+    return { authUrl };
+  }
+
+  async handleOutlookCallback(code: string, state: string) {
+    let stateData: { companyId: string; userId: string };
+
+    try {
+      stateData = JSON.parse(Buffer.from(state, 'base64').toString());
+    } catch {
+      throw new BadRequestException('Invalid state parameter');
+    }
+
+    const { companyId, userId } = stateData;
+
+    // Verify user belongs to company
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, companyId },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Invalid user or company');
+    }
+
+    const clientId = this.configService.get<string>('microsoftEmail.clientId') || '';
+    const clientSecret = this.configService.get<string>('microsoftEmail.clientSecret') || '';
+    const redirectUri = this.configService.get<string>('microsoftEmail.redirectUri') || '';
+
+    try {
+      // Exchange code for tokens
+      const tokenResponse = await axios.post(
+        'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+        new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          code,
+          redirect_uri: redirectUri,
+          grant_type: 'authorization_code',
+          scope: 'Mail.Read User.Read offline_access',
+        }).toString(),
+        {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        },
+      );
+
+      const {
+        access_token,
+        refresh_token,
+        expires_in,
+      } = tokenResponse.data;
+
+      if (!access_token) {
+        throw new BadRequestException('Failed to obtain access token from Microsoft');
+      }
+
+      // Get user email from Graph API
+      const meResponse = await axios.get('https://graph.microsoft.com/v1.0/me', {
+        headers: { Authorization: `Bearer ${access_token}` },
+      });
+
+      const userEmail =
+        meResponse.data.mail || meResponse.data.userPrincipalName;
+
+      if (!userEmail) {
+        throw new BadRequestException('Failed to get email from Microsoft');
+      }
+
+      // Calculate expiry
+      const expiresAt = expires_in
+        ? new Date(Date.now() + expires_in * 1000)
+        : null;
+
+      // Check if connection already exists
+      const existingConnection = await this.prisma.emailConnection.findFirst({
+        where: { companyId, email: userEmail },
+      });
+
+      let connectionId: string;
+
+      const encryptedAccessToken = this.encryptionService.encrypt(access_token);
+      const encryptedRefreshToken = refresh_token
+        ? this.encryptionService.encrypt(refresh_token)
+        : null;
+
+      if (existingConnection) {
+        await this.prisma.emailConnection.update({
+          where: { id: existingConnection.id },
+          data: {
+            provider: EmailProvider.OUTLOOK,
+            accessToken: encryptedAccessToken,
+            refreshToken:
+              encryptedRefreshToken || existingConnection.refreshToken,
+            expiresAt,
+            isActive: true,
+          },
+        });
+        connectionId = existingConnection.id;
+      } else {
+        const newConnection = await this.prisma.emailConnection.create({
+          data: {
+            provider: EmailProvider.OUTLOOK,
+            email: userEmail,
+            accessToken: encryptedAccessToken,
+            refreshToken: encryptedRefreshToken,
+            expiresAt,
+            isActive: true,
+            companyId,
+          },
+        });
+        connectionId = newConnection.id;
+      }
+
+      return {
+        success: true,
+        email: userEmail,
+        connectionId,
+        message: 'Outlook connected successfully',
+      };
+    } catch (error: any) {
+      if (error instanceof BadRequestException) throw error;
+      this.logger.error(
+        'Outlook OAuth error:',
+        error.response?.data || error.message,
+      );
+      throw new InternalServerErrorException(
+        'Failed to connect Outlook account',
+      );
+    }
+  }
+
+  async refreshOutlookToken(connectionId: string) {
+    const connection = await this.prisma.emailConnection.findUnique({
+      where: { id: connectionId },
+    });
+
+    if (!connection || !connection.refreshToken) {
+      throw new BadRequestException(
+        'Cannot refresh token - no refresh token available',
+      );
+    }
+
+    const clientId = this.configService.get<string>('microsoftEmail.clientId') || '';
+    const clientSecret = this.configService.get<string>('microsoftEmail.clientSecret') || '';
+
+    try {
+      const plainRefreshToken = this.encryptionService.decrypt(
+        connection.refreshToken,
+      );
+
+      const tokenResponse = await axios.post(
+        'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+        new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          refresh_token: plainRefreshToken,
+          grant_type: 'refresh_token',
+          scope: 'Mail.Read User.Read offline_access',
+        }).toString(),
+        {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        },
+      );
+
+      const { access_token, refresh_token, expires_in } = tokenResponse.data;
+
+      const expiresAt = expires_in
+        ? new Date(Date.now() + expires_in * 1000)
+        : null;
+
+      const updateData: any = {
+        accessToken: this.encryptionService.encrypt(access_token),
+        expiresAt,
+      };
+
+      // Microsoft may rotate refresh tokens
+      if (refresh_token) {
+        updateData.refreshToken = this.encryptionService.encrypt(refresh_token);
+      }
+
+      await this.prisma.emailConnection.update({
+        where: { id: connectionId },
+        data: updateData,
+      });
+
+      return access_token;
+    } catch (error: any) {
+      this.logger.error(
+        'Outlook token refresh error:',
+        error.response?.data || error.message,
+      );
+
+      await this.prisma.emailConnection.update({
+        where: { id: connectionId },
+        data: { isActive: false },
+      });
+
+      throw new BadRequestException(
+        'Failed to refresh Outlook token - please reconnect',
+      );
+    }
+  }
+
+  // ==========================================
+  // SHARED
+  // ==========================================
+
   async getEmailConnections(companyId: string) {
     const connections = await this.prisma.emailConnection.findMany({
       where: { companyId },
@@ -173,13 +413,15 @@ export class IntegrationsService {
       throw new NotFoundException('Email connection not found');
     }
 
-    // Revoke tokens if possible
+    // Revoke tokens based on provider
     if (connection.accessToken) {
       try {
-        const plainToken = this.encryptionService.decrypt(connection.accessToken);
-        await this.oauth2Client.revokeToken(plainToken);
+        if (connection.provider === EmailProvider.GMAIL) {
+          const plainToken = this.encryptionService.decrypt(connection.accessToken);
+          await this.oauth2Client.revokeToken(plainToken);
+        }
+        // Outlook doesn't have a revoke endpoint; tokens expire naturally
       } catch (error) {
-        // Token might already be revoked, continue with deletion
         this.logger.warn('Failed to revoke token:', error);
       }
     }
@@ -202,6 +444,12 @@ export class IntegrationsService {
       );
     }
 
+    // Dispatch to provider-specific refresh
+    if (connection.provider === EmailProvider.OUTLOOK) {
+      return this.refreshOutlookToken(connectionId);
+    }
+
+    // Gmail refresh
     try {
       const plainRefreshToken = this.encryptionService.decrypt(connection.refreshToken);
       this.oauth2Client.setCredentials({

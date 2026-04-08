@@ -8,14 +8,15 @@ import { ConfigService } from '@nestjs/config';
 import { google, gmail_v1 } from 'googleapis';
 import { PrismaService } from '../prisma/prisma.service';
 import { IntegrationsService } from '../integrations/integrations.service';
-import { AiService } from '../ai/ai.service';
-import { FileProcessingService } from '../file-processing/file-processing.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { BillingService } from '../billing/billing.service';
-import { StorageService } from '../storage/storage.service';
-import { EmailPrefilterService, EmailData } from './email-prefilter.service';
-import * as path from 'path';
-import { NotificationType, UsageType } from '@prisma/client';
+import {
+  EmailProcessingService,
+  NormalizedEmail,
+  NormalizedAttachment,
+  SyncResult,
+} from './email-processing.service';
+import { NotificationType } from '@prisma/client';
+
+export type { SyncResult } from './email-processing.service';
 
 export interface GmailMessage {
   id: string;
@@ -35,37 +36,17 @@ export interface EmailAttachment {
   data?: Buffer;
 }
 
-export interface SyncResult {
-  connectionId: string;
-  email: string;
-  emailsProcessed: number;
-  emailsImported: number;
-  emailsSkipped: number;
-  errors: string[];
-}
-
-const AUTO_IMPORT_CONFIDENCE_THRESHOLD = 80;
-const CV_MIME_TYPES = [
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-];
-
 @Injectable()
 export class EmailMonitorService {
   private readonly logger = new Logger(EmailMonitorService.name);
+  private readonly pollingConnections = new Set<string>();
   private oauth2Client;
 
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
     private integrationsService: IntegrationsService,
-    private aiService: AiService,
-    private fileProcessingService: FileProcessingService,
-    private emailPrefilterService: EmailPrefilterService,
-    private notificationsService: NotificationsService,
-    private billingService: BillingService,
-    private storageService: StorageService,
+    private emailProcessingService: EmailProcessingService,
   ) {
     const clientId = this.configService.get<string>('google.clientId');
     const clientSecret = this.configService.get<string>('google.clientSecret');
@@ -85,114 +66,193 @@ export class EmailMonitorService {
     connectionId: string,
     companyId?: string,
   ): Promise<SyncResult> {
-    const connection = await this.prisma.emailConnection.findUnique({
-      where: { id: connectionId },
-      include: { company: true },
-    });
-
-    if (!connection) {
-      throw new NotFoundException('Email connection not found');
-    }
-
-    if (companyId && connection.companyId !== companyId) {
-      throw new BadRequestException(
-        'Connection does not belong to this company',
+    // Prevent concurrent polls for the same connection (Pub/Sub retries, cron overlap)
+    if (this.pollingConnections.has(connectionId)) {
+      this.logger.debug(
+        `Skipping poll for connection ${connectionId} — already in progress`,
       );
+      return {
+        connectionId,
+        email: '',
+        emailsProcessed: 0,
+        emailsImported: 0,
+        emailsSkipped: 0,
+        errors: [],
+      };
     }
 
-    const result: SyncResult = {
-      connectionId,
-      email: connection.email,
-      emailsProcessed: 0,
-      emailsImported: 0,
-      emailsSkipped: 0,
-      errors: [],
-    };
+    this.pollingConnections.add(connectionId);
 
     try {
-      // Get valid access token
-      const accessToken =
-        await this.integrationsService.getValidAccessToken(connectionId);
-      this.oauth2Client.setCredentials({ access_token: accessToken });
+      const connection = await this.prisma.emailConnection.findUnique({
+        where: { id: connectionId },
+        include: { company: true },
+      });
 
-      this.logger.log(
-        `Polling emails for ${connection.email} (connection: ${connectionId}, lastHistoryId: ${connection.lastHistoryId || 'none'}, token: ${accessToken ? accessToken.substring(0, 10) + '...' : 'MISSING'})`,
-      );
+      if (!connection) {
+        throw new NotFoundException('Email connection not found');
+      }
 
-      const gmail = google.gmail({ version: 'v1', auth: this.oauth2Client });
+      if (companyId && connection.companyId !== companyId) {
+        throw new BadRequestException(
+          'Connection does not belong to this company',
+        );
+      }
 
-      // Fetch new emails
-      const messages = await this.fetchNewEmails(
-        gmail,
-        connection.lastHistoryId,
-      );
+      const result: SyncResult = {
+        connectionId,
+        email: connection.email,
+        emailsProcessed: 0,
+        emailsImported: 0,
+        emailsSkipped: 0,
+        errors: [],
+      };
 
-      this.logger.log(
-        `Found ${messages.length} new emails for connection ${connectionId}`,
-      );
+      try {
+        // Get valid access token
+        const accessToken =
+          await this.integrationsService.getValidAccessToken(connectionId);
+        this.oauth2Client.setCredentials({ access_token: accessToken });
 
-      // Process each email
-      for (const message of messages) {
-        try {
-          const processed = await this.processEmail(gmail, connection, message);
-          result.emailsProcessed++;
+        this.logger.log(
+          `Polling emails for ${connection.email} (connection: ${connectionId}, lastHistoryId: ${connection.lastHistoryId || 'none'}, token: ${accessToken ? accessToken.substring(0, 10) + '...' : 'MISSING'})`,
+        );
 
-          if (processed.imported) {
-            result.emailsImported++;
-          } else {
-            result.emailsSkipped++;
+        const gmail = google.gmail({ version: 'v1', auth: this.oauth2Client });
+
+        // Fetch new emails
+        const messages = await this.fetchNewEmails(
+          gmail,
+          connection.lastHistoryId,
+        );
+
+        this.logger.log(
+          `Found ${messages.length} new emails for connection ${connectionId}`,
+        );
+
+        // Process each email
+        for (const message of messages) {
+          try {
+            // Normalize Gmail message and download attachments
+            const normalized = await this.normalizeGmailMessage(
+              gmail,
+              message,
+            );
+            const processed =
+              await this.emailProcessingService.processNormalizedEmail(
+                normalized,
+                connection,
+              );
+            result.emailsProcessed++;
+
+            if (processed.imported) {
+              result.emailsImported++;
+            } else {
+              result.emailsSkipped++;
+            }
+          } catch (error) {
+            const errorMsg =
+              error instanceof Error ? error.message : 'Unknown error';
+            result.errors.push(`Message ${message.id}: ${errorMsg}`);
+            this.logger.error(`Error processing email ${message.id}:`, error);
           }
-        } catch (error) {
-          const errorMsg =
-            error instanceof Error ? error.message : 'Unknown error';
-          result.errors.push(`Message ${message.id}: ${errorMsg}`);
-          this.logger.error(`Error processing email ${message.id}:`, error);
         }
-      }
 
-      // Update last sync time and history ID
-      if (messages.length > 0) {
-        const lastMessage = messages[messages.length - 1];
-        await this.prisma.emailConnection.update({
-          where: { id: connectionId },
-          data: {
-            lastSyncAt: new Date(),
-            lastHistoryId: lastMessage.historyId,
-          },
-        });
-      } else {
-        await this.prisma.emailConnection.update({
-          where: { id: connectionId },
-          data: { lastSyncAt: new Date() },
-        });
-      }
+        // Update last sync time and history ID
+        if (messages.length > 0) {
+          const lastMessage = messages[messages.length - 1];
+          await this.prisma.emailConnection.update({
+            where: { id: connectionId },
+            data: {
+              lastSyncAt: new Date(),
+              lastHistoryId: lastMessage.historyId,
+            },
+          });
+        } else {
+          await this.prisma.emailConnection.update({
+            where: { id: connectionId },
+            data: { lastSyncAt: new Date() },
+          });
+        }
 
-      // Send notification if candidates were imported
-      if (result.emailsImported > 0) {
-        await this.notificationsService.createNotification({
-          type: NotificationType.EMAIL_IMPORT_COMPLETE,
-          companyId: connection.companyId,
-          title: 'Email Import Complete',
-          message: `${result.emailsImported} new candidate(s) imported from ${connection.email}.`,
-          metadata: {
-            connectionId: connection.id,
-            email: connection.email,
-            count: result.emailsImported,
-          },
-        });
-      }
+        // Send notification if candidates were imported
+        await this.emailProcessingService.sendImportNotification(
+          connection.companyId,
+          connection.id,
+          connection.email,
+          result.emailsImported,
+        );
 
-      return result;
-    } catch (error) {
-      this.logger.error(
-        `Failed to poll emails for connection ${connectionId}:`,
-        error,
-      );
-      result.errors.push(
-        error instanceof Error ? error.message : 'Unknown error',
-      );
-      return result;
+        return result;
+      } catch (error) {
+        this.logger.error(
+          `Failed to poll emails for connection ${connectionId}:`,
+          error,
+        );
+        result.errors.push(
+          error instanceof Error ? error.message : 'Unknown error',
+        );
+        return result;
+      }
+    } finally {
+      this.pollingConnections.delete(connectionId);
     }
+  }
+
+  /**
+   * Normalize a Gmail message into a provider-agnostic NormalizedEmail.
+   * Downloads attachment data inline.
+   */
+  private async normalizeGmailMessage(
+    gmail: gmail_v1.Gmail,
+    message: GmailMessage,
+  ): Promise<NormalizedEmail> {
+    const { subject, from, bodyText, bodyHtml, headers } =
+      this.extractEmailData(message);
+
+    const senderEmail = this.extractEmail(from);
+    const senderName = this.extractName(from);
+
+    // Extract and download attachments
+    const rawAttachments = await this.extractAttachments(gmail, message);
+    const attachments: NormalizedAttachment[] = [];
+
+    for (const att of rawAttachments) {
+      try {
+        const response = await gmail.users.messages.attachments.get({
+          userId: 'me',
+          messageId: message.id,
+          id: att.attachmentId,
+        });
+
+        if (response.data.data) {
+          attachments.push({
+            filename: att.filename,
+            mimeType: att.mimeType,
+            size: att.size,
+            data: Buffer.from(response.data.data, 'base64'),
+          });
+        }
+      } catch (error) {
+        this.logger.error(
+          `Failed to download attachment ${att.filename} from message ${message.id}:`,
+          error,
+        );
+      }
+    }
+
+    return {
+      messageId: message.id,
+      subject,
+      senderEmail,
+      senderName,
+      bodyText,
+      bodyHtml,
+      receivedAt: new Date(parseInt(message.internalDate)),
+      headers,
+      attachments,
+      isInbox: message.labelIds?.includes('INBOX') ?? false,
+    };
   }
 
   /**
@@ -303,248 +363,6 @@ export class EmailMonitorService {
   }
 
   /**
-   * Process a single email message
-   */
-  private async processEmail(
-    gmail: gmail_v1.Gmail,
-    connection: any,
-    message: GmailMessage,
-  ): Promise<{ imported: boolean }> {
-    // Skip messages not in INBOX (e.g., SENT, DRAFT, SPAM)
-    if (!message.labelIds || !message.labelIds.includes('INBOX')) {
-      this.logger.log(
-        `Email ${message.id} not in INBOX (labels: ${message.labelIds?.join(', ')}), skipping`,
-      );
-      return { imported: false };
-    }
-
-    // Check if already processed
-    const existingImport = await this.prisma.emailImport.findUnique({
-      where: { messageId: message.id },
-    });
-
-    if (existingImport) {
-      this.logger.log(`Email ${message.id} already processed, skipping`);
-      return { imported: false };
-    }
-
-    // Extract email data
-    const { subject, from, bodyText, bodyHtml, headers } =
-      this.extractEmailData(message);
-
-    const senderEmail = this.extractEmail(from);
-    const senderName = this.extractName(from);
-
-    // Skip emails sent BY the connected account (outgoing emails)
-    if (senderEmail.toLowerCase() === connection.email.toLowerCase()) {
-      this.logger.log(
-        `Email ${message.id} sent by connected account ${connection.email}, skipping`,
-      );
-      return { imported: false };
-    }
-
-    // Extract attachments early for prefilter
-    const attachments = await this.extractAttachments(gmail, message);
-    const attachmentInfo = attachments.map((a) => ({
-      filename: a.filename,
-      mimeType: a.mimeType,
-    }));
-
-    // Build email data for prefilter
-    const emailData: EmailData = {
-      subject,
-      senderEmail,
-      senderName,
-      bodyText,
-      bodyHtml,
-      attachments: attachmentInfo,
-      headers,
-      companyDomain: connection.company?.domain || undefined,
-    };
-
-    // Run prefilter to check if we need AI classification
-    const prefilterResult =
-      this.emailPrefilterService.prefilterEmail(emailData);
-
-    this.logger.log(
-      `Prefilter result for email ${message.id}: ${prefilterResult.action} - ${prefilterResult.reason}`,
-    );
-
-    // Handle prefilter result
-    if (prefilterResult.action === 'skip') {
-      // Create email import record with SKIPPED status
-      // Note: bodyText/bodyHtml intentionally omitted to save storage (~95% reduction)
-      await this.prisma.emailImport.create({
-        data: {
-          messageId: message.id,
-          subject,
-          senderEmail,
-          senderName,
-          receivedAt: new Date(parseInt(message.internalDate)),
-          isJobApplication: false,
-          confidence: 0,
-          status: 'SKIPPED',
-          skipReason: prefilterResult.reason,
-          processedAt: new Date(),
-          emailConnectionId: connection.id,
-        },
-      });
-      return { imported: false };
-    }
-
-    // Determine classification (either from prefilter auto-classify or AI)
-    let classification: {
-      isJobApplication: boolean;
-      confidence: number;
-      detectedPosition: string | null;
-    };
-
-    if (prefilterResult.action === 'auto_classify') {
-      // Use prefilter classification (skip AI call)
-      classification = {
-        isJobApplication: true,
-        confidence: prefilterResult.confidence || 85,
-        detectedPosition: prefilterResult.detectedPosition || null,
-      };
-      this.logger.log(
-        `Email ${message.id} auto-classified by prefilter (${classification.confidence}% confidence)`,
-      );
-    } else {
-      // Use AI classification
-      const aiClassification = await this.aiService.classifyEmail(
-        subject,
-        bodyText,
-        senderEmail,
-        senderName,
-      );
-      classification = {
-        isJobApplication: aiClassification.isJobApplication,
-        confidence: aiClassification.confidence,
-        detectedPosition: aiClassification.detectedPosition,
-      };
-
-      // Track AI classification call (counts as AI_PARSING_CALL)
-      await this.billingService.trackUsage(
-        connection.companyId,
-        UsageType.AI_PARSING_CALL,
-      );
-    }
-
-    // Create email import record
-    const emailImport = await this.prisma.emailImport.create({
-      data: {
-        messageId: message.id,
-        subject,
-        senderEmail,
-        senderName,
-        receivedAt: new Date(parseInt(message.internalDate)),
-        isJobApplication: classification.isJobApplication,
-        confidence: classification.confidence,
-        detectedPosition: classification.detectedPosition,
-        bodyText,
-        bodyHtml,
-        status: 'PENDING',
-        skipReason:
-          prefilterResult.action === 'auto_classify'
-            ? `Auto-classified: ${prefilterResult.reason}`
-            : null,
-        emailConnectionId: connection.id,
-      },
-    });
-
-    // If high confidence job application and auto-import is enabled
-    if (
-      connection.autoImport &&
-      classification.isJobApplication &&
-      classification.confidence >= AUTO_IMPORT_CONFIDENCE_THRESHOLD
-    ) {
-      this.logger.log(
-        `Email ${message.id} classified as job application (${classification.confidence}% confidence)`,
-      );
-
-      // Update status to processing
-      await this.prisma.emailImport.update({
-        where: { id: emailImport.id },
-        data: { status: 'PROCESSING' },
-      });
-
-      try {
-        const cvAttachments = attachments.filter((a) =>
-          CV_MIME_TYPES.includes(a.mimeType),
-        );
-
-        if (cvAttachments.length > 0) {
-          // Process CV attachment
-          await this.processAttachment(
-            gmail,
-            cvAttachments[0],
-            message.id,
-            emailImport,
-            connection.companyId,
-            classification.detectedPosition,
-          );
-        } else {
-          // Create candidate from email body
-          await this.createCandidateFromEmail(
-            emailImport,
-            connection.companyId,
-            senderEmail,
-            senderName,
-            { detectedPosition: classification.detectedPosition },
-          );
-        }
-
-        await this.prisma.emailImport.update({
-          where: { id: emailImport.id },
-          data: {
-            status: 'IMPORTED',
-            processedAt: new Date(),
-            bodyText: null,
-            bodyHtml: null,
-          },
-        });
-
-        // Track email imported usage
-        await this.billingService.trackUsage(
-          connection.companyId,
-          UsageType.EMAIL_IMPORTED,
-        );
-
-        return { imported: true };
-      } catch (error) {
-        this.logger.error(`Failed to import email ${message.id}:`, error);
-        await this.prisma.emailImport.update({
-          where: { id: emailImport.id },
-          data: {
-            status: 'FAILED',
-            errorMessage:
-              error instanceof Error ? error.message : 'Unknown error',
-            processedAt: new Date(),
-            bodyText: null,
-            bodyHtml: null,
-          },
-        });
-        throw error;
-      }
-    } else {
-      // Not a job application or low confidence
-      await this.prisma.emailImport.update({
-        where: { id: emailImport.id },
-        data: {
-          status: 'SKIPPED',
-          processedAt: new Date(),
-          skipReason: classification.isJobApplication
-            ? `Low confidence (${classification.confidence}%)`
-            : 'AI determined not a job application',
-          bodyText: null,
-          bodyHtml: null,
-        },
-      });
-      return { imported: false };
-    }
-  }
-
-  /**
    * Extract email data from message
    */
   private extractEmailData(message: GmailMessage): {
@@ -580,9 +398,6 @@ export class EmailMonitorService {
     let bodyText = '';
     let bodyHtml = '';
 
-    // Extract body from parts
-    // Note: Gmail returns MIME types with charset (e.g., "text/plain; charset=utf-8")
-    // so we use startsWith() instead of exact match
     const extractBody = (part: gmail_v1.Schema$MessagePart, depth = 0) => {
       const mimeType = part.mimeType?.toLowerCase() || '';
 
@@ -631,7 +446,7 @@ export class EmailMonitorService {
   }
 
   /**
-   * Extract attachments from email
+   * Extract attachments from email (metadata only, no download)
    */
   async extractAttachments(
     gmail: gmail_v1.Gmail,
@@ -662,337 +477,6 @@ export class EmailMonitorService {
   }
 
   /**
-   * Process a CV attachment
-   */
-  async processAttachment(
-    gmail: gmail_v1.Gmail,
-    attachment: EmailAttachment,
-    messageId: string,
-    emailImport: any,
-    companyId: string,
-    detectedPosition?: string | null,
-  ): Promise<void> {
-    // Download attachment data
-    const response = await gmail.users.messages.attachments.get({
-      userId: 'me',
-      messageId,
-      id: attachment.attachmentId,
-    });
-
-    if (!response.data.data) {
-      throw new Error('Failed to download attachment');
-    }
-
-    const fileBuffer = Buffer.from(response.data.data, 'base64');
-
-    // Upload file to S3 (or local storage as fallback)
-    // Folder structure: {companyId}/cvs/{uuid}.{ext}
-    const uploadResult = await this.storageService.uploadFile(
-      fileBuffer,
-      attachment.filename,
-      attachment.mimeType,
-      companyId,
-      'cvs',
-    );
-
-    this.logger.debug(
-      `Attachment uploaded: ${attachment.filename} -> ${uploadResult.key} (local: ${uploadResult.isLocal})`,
-    );
-
-    // Extract text from CV
-    const extraction = await this.fileProcessingService.extractText(
-      fileBuffer,
-      attachment.filename,
-    );
-
-    if (!extraction.text || extraction.confidence < 30) {
-      throw new Error('Could not extract text from CV attachment');
-    }
-
-    // Parse CV using AI
-    let parsedData;
-    let aiSummary = null;
-
-    try {
-      parsedData = await this.aiService.parseCV(
-        extraction.text,
-        attachment.filename,
-      );
-      aiSummary = parsedData.summary || null;
-
-      // Track AI parsing usage
-      await this.billingService.trackUsage(
-        companyId,
-        UsageType.AI_PARSING_CALL,
-      );
-    } catch (error) {
-      this.logger.error('AI parsing error:', error);
-      parsedData = this.extractBasicDataFromFilename(attachment.filename);
-    }
-
-    // Use sender info as fallback
-    const fullName =
-      parsedData.personalInfo?.fullName ||
-      emailImport.senderName ||
-      this.extractNameFromFilename(attachment.filename);
-
-    const email =
-      parsedData.personalInfo?.email?.toLowerCase() ||
-      emailImport.senderEmail.toLowerCase();
-
-    // Check for duplicate by email
-    const existing = await this.prisma.candidate.findFirst({
-      where: {
-        companyId,
-        email,
-      },
-    });
-
-    if (existing) {
-      this.logger.warn(`Duplicate candidate with email ${email}, skipping`);
-      return;
-    }
-
-    // Find matching job if position detected
-    let jobId: string | null = null;
-    if (detectedPosition) {
-      const job = await this.prisma.job.findFirst({
-        where: {
-          companyId,
-          title: {
-            contains: detectedPosition,
-            mode: 'insensitive',
-          },
-          status: 'ACTIVE',
-        },
-      });
-      if (job) {
-        jobId = job.id;
-      }
-    }
-
-    // Create candidate record
-    const candidate = await this.prisma.candidate.create({
-      data: {
-        fullName,
-        email,
-        phone: parsedData.personalInfo?.phone,
-        location: parsedData.personalInfo?.location,
-        linkedinUrl: parsedData.personalInfo?.linkedinUrl,
-        githubUrl: parsedData.personalInfo?.githubUrl,
-        portfolioUrl: parsedData.personalInfo?.portfolioUrl,
-        source: 'EMAIL',
-        status: 'NEW',
-        cvFileUrl: uploadResult.url, // S3 URL or local path
-        cvFileName: attachment.filename,
-        cvText: extraction.text,
-        extractionConfidence: extraction.confidence,
-        education: parsedData.education || [],
-        experience: parsedData.experience || [],
-        skills: parsedData.skills || [],
-        projects: parsedData.projects || [],
-        certifications: parsedData.certifications || [],
-        languages: parsedData.languages || [],
-        aiSummary,
-        companyId,
-        jobId,
-        emailImportId: emailImport.id,
-      },
-    });
-
-    this.logger.log(`Created candidate ${candidate.id} from email attachment`);
-
-    // Score candidate if job assigned
-    if (jobId) {
-      await this.scoreCandidate(candidate.id, jobId);
-    }
-  }
-
-  /**
-   * Create candidate from email body (no CV attachment)
-   */
-  private async createCandidateFromEmail(
-    emailImport: any,
-    companyId: string,
-    senderEmail: string,
-    senderName: string,
-    classification: { detectedPosition?: string | null },
-  ): Promise<void> {
-    // Check for duplicate
-    const existing = await this.prisma.candidate.findFirst({
-      where: {
-        companyId,
-        email: senderEmail.toLowerCase(),
-      },
-    });
-
-    if (existing) {
-      this.logger.warn(
-        `Duplicate candidate with email ${senderEmail}, skipping`,
-      );
-      return;
-    }
-
-    // Find matching job
-    let jobId: string | null = null;
-    if (classification.detectedPosition) {
-      const job = await this.prisma.job.findFirst({
-        where: {
-          companyId,
-          title: {
-            contains: classification.detectedPosition,
-            mode: 'insensitive',
-          },
-          status: 'ACTIVE',
-        },
-      });
-      if (job) {
-        jobId = job.id;
-      }
-    }
-
-    // Create basic candidate record
-    await this.prisma.candidate.create({
-      data: {
-        fullName: senderName || senderEmail.split('@')[0],
-        email: senderEmail.toLowerCase(),
-        source: 'EMAIL',
-        status: 'NEW',
-        cvFileUrl: '', // No CV file
-        aiSummary: `Candidate applied via email. Subject: ${emailImport.subject}`,
-        companyId,
-        jobId,
-        emailImportId: emailImport.id,
-      },
-    });
-
-    this.logger.log(`Created candidate from email body (no CV attachment)`);
-  }
-
-  /**
-   * Score a candidate against a job
-   */
-  private async scoreCandidate(candidateId: string, jobId: string) {
-    try {
-      const candidate = await this.prisma.candidate.findUnique({
-        where: { id: candidateId },
-      });
-
-      const job = await this.prisma.job.findUnique({
-        where: { id: jobId },
-      });
-
-      if (!candidate || !job) return;
-
-      const parsedCV = {
-        personalInfo: {
-          fullName: candidate.fullName,
-          email: candidate.email,
-          phone: candidate.phone,
-          location: candidate.location,
-          linkedinUrl: candidate.linkedinUrl,
-          githubUrl: candidate.githubUrl,
-          portfolioUrl: candidate.portfolioUrl,
-        },
-        education: (candidate.education as any[]) || [],
-        experience: (candidate.experience as any[]) || [],
-        skills: (candidate.skills as any) || [],
-        projects: (candidate.projects as any[]) || [],
-        certifications: (candidate.certifications as any[]) || [],
-        languages: (candidate.languages as any[]) || [],
-        summary: candidate.aiSummary,
-      };
-
-      const scoreResult = await this.aiService.scoreCandidate(parsedCV, {
-        title: job.title,
-        requiredSkills: job.requiredSkills,
-        preferredSkills: job.preferredSkills,
-        experienceLevel: job.experienceLevel,
-        requirements: (job.requirements as Record<string, any>) || {},
-      });
-
-      // Track AI scoring usage
-      await this.billingService.trackUsage(
-        candidate.companyId,
-        UsageType.AI_SCORING_CALL,
-      );
-
-      // Save score
-      await this.prisma.candidateScore.create({
-        data: {
-          candidateId,
-          jobId,
-          overallScore: scoreResult.overallScore,
-          skillsMatchScore: scoreResult.skillsMatchScore,
-          experienceScore: scoreResult.experienceScore,
-          educationScore: scoreResult.educationScore,
-          growthScore: scoreResult.growthScore,
-          bonusScore: scoreResult.bonusScore,
-          recommendation: scoreResult.recommendation,
-          scoreExplanation: scoreResult.scoreExplanation,
-        },
-      });
-
-      // Update candidate overall score
-      await this.prisma.candidate.update({
-        where: { id: candidateId },
-        data: {
-          overallScore: scoreResult.overallScore,
-          scoreBreakdown: scoreResult.scoreExplanation,
-        },
-      });
-    } catch (error) {
-      this.logger.error('Scoring error:', error);
-    }
-  }
-
-  /**
-   * Extract name from filename
-   */
-  private extractNameFromFilename(fileName: string): string {
-    let name = path.basename(fileName, path.extname(fileName));
-    name = name
-      .replace(/[-_]/g, ' ')
-      .replace(/cv|resume|curriculum|vitae/gi, '')
-      .replace(/\d+/g, '')
-      .trim();
-
-    return (
-      name
-        .split(' ')
-        .filter(Boolean)
-        .map(
-          (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
-        )
-        .join(' ') || 'Unknown Candidate'
-    );
-  }
-
-  /**
-   * Extract basic data from filename
-   */
-  private extractBasicDataFromFilename(fileName: string) {
-    return {
-      personalInfo: {
-        fullName: this.extractNameFromFilename(fileName),
-        email: null,
-        phone: null,
-        location: null,
-        linkedinUrl: null,
-        githubUrl: null,
-        portfolioUrl: null,
-      },
-      education: [],
-      experience: [],
-      skills: [],
-      projects: [],
-      certifications: [],
-      languages: [],
-      summary: null,
-    };
-  }
-
-  /**
    * Sync all connections for a company
    */
   async syncAllConnectionsForCompany(companyId: string): Promise<{
@@ -1003,6 +487,7 @@ export class EmailMonitorService {
       where: {
         companyId,
         isActive: true,
+        provider: 'GMAIL',
       },
     });
 
