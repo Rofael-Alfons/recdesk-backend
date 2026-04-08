@@ -585,8 +585,7 @@ export class BillingService {
       .filter((r) => r.type === 'EMAIL_IMPORTED')
       .reduce((sum, r) => sum + r.count, 0);
 
-    // Get limits from plan (with defaults for free trial)
-    const cvLimit = subscription?.plan.cvLimit ?? 50;
+    const cvLimit = subscription?.plan.cvLimit ?? 0;
     const aiCallLimit = subscription?.plan.aiCallLimit ?? -1;
     const emailSentLimit = subscription?.plan.emailSentLimit ?? -1;
     const emailImportLimit = subscription?.plan.emailImportLimit ?? -1;
@@ -657,8 +656,7 @@ export class BillingService {
     });
 
     if (!subscription) {
-      // No subscription - use free trial limits
-      return { allowed: true, current: 0, limit: 50 };
+      return { allowed: false, current: 0, limit: 0, message: 'No active subscription. Please subscribe to a plan.' };
     }
 
     const usage = await this.getUsage(companyId);
@@ -733,84 +731,15 @@ export class BillingService {
   }
 
   /**
-   * Create a free trial subscription
-   */
-  async createTrialSubscription(companyId: string): Promise<void> {
-    // Find or create free trial plan
-    let trialPlan = await this.prisma.subscriptionPlan.findFirst({
-      where: { name: 'Free Trial' },
-    });
-
-    if (!trialPlan) {
-      trialPlan = await this.prisma.subscriptionPlan.create({
-        data: {
-          name: 'Free Trial',
-          monthlyPrice: 0,
-          cvLimit: 50,
-          aiCallLimit: 100,
-          emailSentLimit: 50,
-          emailImportLimit: 100,
-          userLimit: 3,
-          features: {
-            emailIntegration: true,
-            bulkUpload: true,
-            aiParsing: true,
-            aiScoring: true,
-            csvExport: true,
-            pipelineManagement: false,
-            teamCollaboration: false,
-          },
-          sortOrder: 0,
-        },
-      });
-    }
-
-    const trialEndsAt = new Date();
-    trialEndsAt.setDate(trialEndsAt.getDate() + 14); // 14-day trial
-
-    await this.prisma.subscription.create({
-      data: {
-        companyId,
-        planId: trialPlan.id,
-        status: 'TRIALING',
-        currentPeriodStart: new Date(),
-        currentPeriodEnd: trialEndsAt,
-        trialEndsAt,
-      },
-    });
-
-    this.logger.log(`Created trial subscription for company ${companyId}`);
-  }
-
-  /**
-   * Seed subscription plans
+   * Seed subscription plans (EGP pricing, amounts in piasters)
    */
   async seedPlans(): Promise<void> {
     const plans = [
       {
-        name: 'Free Trial',
-        monthlyPrice: 0,
-        cvLimit: 50,
-        aiCallLimit: 100,
-        emailSentLimit: 50,
-        emailImportLimit: 100,
-        userLimit: 3,
-        features: {
-          emailIntegration: true,
-          bulkUpload: true,
-          aiParsing: true,
-          aiScoring: true,
-          csvExport: true,
-          pipelineManagement: false,
-          teamCollaboration: false,
-        },
-        sortOrder: 0,
-      },
-      {
         name: 'Starter',
         stripePriceId: this.configService.get<string>('STRIPE_STARTER_PRICE_ID'),
-        monthlyPrice: 4900, // $49
-        annualPrice: 47000, // $470 (2 months free)
+        monthlyPrice: 250000, // 2,500 EGP
+        annualPrice: 2400000, // 24,000 EGP/yr (2,000 EGP/mo — save 20%)
         cvLimit: 500,
         aiCallLimit: 1000,
         emailSentLimit: 500,
@@ -826,13 +755,13 @@ export class BillingService {
           teamCollaboration: false,
           emailSupport: true,
         },
-        sortOrder: 1,
+        sortOrder: 0,
       },
       {
         name: 'Professional',
         stripePriceId: this.configService.get<string>('STRIPE_PROFESSIONAL_PRICE_ID'),
-        monthlyPrice: 9900, // $99
-        annualPrice: 95000, // $950 (2 months free)
+        monthlyPrice: 550000, // 5,500 EGP
+        annualPrice: 5400000, // 54,000 EGP/yr (4,500 EGP/mo — save 18%)
         cvLimit: 2000,
         aiCallLimit: 5000,
         emailSentLimit: 2000,
@@ -849,13 +778,13 @@ export class BillingService {
           emailSupport: true,
           prioritySupport: true,
         },
-        sortOrder: 2,
+        sortOrder: 1,
       },
       {
         name: 'Enterprise',
         stripePriceId: this.configService.get<string>('STRIPE_ENTERPRISE_PRICE_ID'),
-        monthlyPrice: 29900, // $299
-        annualPrice: 287000, // $2870 (2 months free)
+        monthlyPrice: 1200000, // 12,000 EGP
+        annualPrice: 12000000, // 120,000 EGP/yr (10,000 EGP/mo — save 17%)
         cvLimit: -1, // Unlimited
         aiCallLimit: -1, // Unlimited
         emailSentLimit: -1, // Unlimited
@@ -875,7 +804,7 @@ export class BillingService {
           customIntegrations: true,
           sla: true,
         },
-        sortOrder: 3,
+        sortOrder: 2,
       },
     ];
 
@@ -951,89 +880,11 @@ export class BillingService {
       this.logger.log(`Expired ${expiredSubscriptionIds.length} active subscriptions`);
     }
 
-    // Also handle expired trials
-    const expiredTrials = await this.prisma.subscription.findMany({
-      where: {
-        status: 'TRIALING',
-        trialEndsAt: { lt: now },
-      },
-      select: { id: true, companyId: true },
-    });
-
-    const expiredTrialIds = expiredTrials.map((s) => s.id);
-    const expiredTrialCompanyIds = expiredTrials.map((s) => s.companyId);
-
-    // Batch update all expired trials
-    if (expiredTrialIds.length > 0) {
-      await this.prisma.subscription.updateMany({
-        where: { id: { in: expiredTrialIds } },
-        data: { status: 'EXPIRED' },
-      });
-
-      // Invalidate cache and send notifications in parallel
-      await Promise.all([
-        ...expiredTrialCompanyIds.map((companyId) => this.cacheService.invalidateSubscription(companyId)),
-        ...expiredTrialCompanyIds.map((companyId) => this.notificationsService.notifyTrialExpired(companyId)),
-      ]);
-
-      this.logger.log(`Expired ${expiredTrialIds.length} trials`);
-    }
-
-    const expired = expiredSubscriptionIds.length + expiredTrialIds.length;
+    const expired = expiredSubscriptionIds.length;
     const notified = expired;
 
     this.logger.log(`Expiration check complete: ${expired} expired, ${notified} notified`);
     return { expired, notified };
-  }
-
-  /**
-   * Send trial expiration warnings
-   * Called by the billing scheduler daily
-   */
-  async sendTrialWarnings(): Promise<{ notified: number }> {
-    const now = new Date();
-    let notified = 0;
-
-    // Find trials ending in 3 days
-    const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-    const fourDaysFromNow = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000);
-
-    const trialsEndingIn3Days = await this.prisma.subscription.findMany({
-      where: {
-        status: 'TRIALING',
-        trialEndsAt: {
-          gte: threeDaysFromNow,
-          lt: fourDaysFromNow,
-        },
-      },
-    });
-
-    for (const subscription of trialsEndingIn3Days) {
-      await this.notificationsService.notifyTrialExpiring(subscription.companyId, 3);
-      notified++;
-    }
-
-    // Find trials ending in 1 day
-    const oneDayFromNow = new Date(now.getTime() + 1 * 24 * 60 * 60 * 1000);
-    const twoDaysFromNow = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
-
-    const trialsEndingIn1Day = await this.prisma.subscription.findMany({
-      where: {
-        status: 'TRIALING',
-        trialEndsAt: {
-          gte: oneDayFromNow,
-          lt: twoDaysFromNow,
-        },
-      },
-    });
-
-    for (const subscription of trialsEndingIn1Day) {
-      await this.notificationsService.notifyTrialExpiring(subscription.companyId, 1);
-      notified++;
-    }
-
-    this.logger.log(`Trial warning check complete: ${notified} notified`);
-    return { notified };
   }
 
   /**
@@ -1132,17 +983,6 @@ export class BillingService {
     const inactiveStatuses: SubscriptionStatus[] = ['CANCELED', 'UNPAID', 'INCOMPLETE_EXPIRED', 'EXPIRED'];
     if (inactiveStatuses.includes(subscription.status)) {
       return { active: false, reason: `Subscription is ${subscription.status.toLowerCase()}` };
-    }
-
-    // Check if trial expired
-    if (subscription.status === 'TRIALING' && subscription.trialEndsAt) {
-      if (new Date(subscription.trialEndsAt) < now) {
-        return { active: false, reason: 'Trial has expired' };
-      }
-      const daysUntilExpiration = Math.ceil(
-        (new Date(subscription.trialEndsAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-      );
-      return { active: true, daysUntilExpiration };
     }
 
     // Check if subscription period has ended
