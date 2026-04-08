@@ -37,20 +37,8 @@ export class BillingController {
   @ApiOperation({ summary: 'Get current subscription' })
   @ApiResponse({ status: 200, description: 'Returns current subscription details' })
   async getSubscription(@CurrentUser() user: AuthUser) {
-    let subscription = await this.billingService.getSubscription(user.companyId);
-
-    // Auto-create trial subscription if none exists
-    if (!subscription) {
-      try {
-        await this.billingService.createTrialSubscription(user.companyId);
-        subscription = await this.billingService.getSubscription(user.companyId);
-      } catch (error) {
-        // If trial creation fails, return no subscription
-        return { status: 'none', message: 'No active subscription' };
-      }
-    }
-
-    return subscription || { status: 'none', message: 'No active subscription' };
+    const subscription = await this.billingService.getSubscription(user.companyId);
+    return subscription || { status: 'none', message: 'No active subscription. Please subscribe to a plan.' };
   }
 
   @Post('checkout')

@@ -312,7 +312,7 @@ export class TransactionalEmailService {
       <p style="margin:0 0 8px;font-weight:600;">What to expect:</p>
       <ul style="margin:0 0 16px;padding-left:20px;color:#475569;">
         <li style="margin-bottom:6px;">Early access invitation before public launch</li>
-        <li style="margin-bottom:6px;">Extended free plan for early adopters</li>
+        <li style="margin-bottom:6px;">Special pricing for early adopters</li>
         <li style="margin-bottom:6px;">Priority onboarding &amp; support</li>
       </ul>
       <p style="margin:0 0 16px;">We'll only email you with launch updates &mdash; no spam, ever.</p>

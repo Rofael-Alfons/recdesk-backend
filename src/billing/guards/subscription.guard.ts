@@ -51,23 +51,14 @@ export class SubscriptionGuard implements CanActivate {
 
     // Check subscription status unless explicitly skipped
     if (!skipStatusCheck) {
-      let subscription = await this.billingService.getSubscription(user.companyId);
+      const subscription = await this.billingService.getSubscription(user.companyId);
 
-      // No subscription found - auto-create a trial subscription
       if (!subscription) {
-        try {
-          await this.billingService.createTrialSubscription(user.companyId);
-          subscription = await this.billingService.getSubscription(user.companyId);
-        } catch (error) {
-          // If we can't create a trial, allow the request with default limits
-          // This ensures the system doesn't break during initial setup
-          return true;
-        }
-      }
-
-      // If still no subscription after trying to create one, allow with default limits
-      if (!subscription) {
-        return true;
+        throw new ForbiddenException({
+          statusCode: 403,
+          error: 'Subscription Required',
+          message: 'No active subscription found. Please subscribe to a plan to continue.',
+        });
       }
 
       // Check if subscription status is inactive
@@ -88,18 +79,6 @@ export class SubscriptionGuard implements CanActivate {
           error: 'Subscription Expired',
           message: 'Your subscription period has expired. Please renew your subscription.',
         });
-      }
-
-      // Check if trial has expired
-      if (subscription.status === 'TRIALING' && subscription.trialEndsAt) {
-        const trialEnd = new Date(subscription.trialEndsAt);
-        if (trialEnd < now) {
-          throw new ForbiddenException({
-            statusCode: 403,
-            error: 'Trial Expired',
-            message: 'Your free trial has expired. Please upgrade to a paid plan to continue.',
-          });
-        }
       }
     }
 

@@ -10,7 +10,6 @@ export class BillingScheduler {
 
   /**
    * Check for expired subscriptions daily at 1:00 AM
-   * This handles both regular subscription expiration and trial expiration
    */
   @Cron('0 1 * * *') // Daily at 1:00 AM
   async checkExpiredSubscriptions() {
@@ -23,24 +22,6 @@ export class BillingScheduler {
       );
     } catch (error) {
       this.logger.error('Error during subscription expiration check:', error);
-    }
-  }
-
-  /**
-   * Send trial expiration warnings daily at 9:00 AM
-   * Notifies users 3 days and 1 day before trial ends
-   */
-  @Cron('0 9 * * *') // Daily at 9:00 AM
-  async sendTrialExpirationWarnings() {
-    this.logger.log('Starting trial expiration warning check...');
-
-    try {
-      const result = await this.billingService.sendTrialWarnings();
-      this.logger.log(
-        `Trial warning check completed: ${result.notified} notifications sent`,
-      );
-    } catch (error) {
-      this.logger.error('Error during trial warning check:', error);
     }
   }
 

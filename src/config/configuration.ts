@@ -239,7 +239,6 @@ export default () => ({
   stripe: {
     secretKey: process.env.STRIPE_SECRET_KEY,
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
-    freeTrialPriceId: process.env.STRIPE_FREE_TRIAL_PRICE_ID,
     starterPriceId: process.env.STRIPE_STARTER_PRICE_ID,
     professionalPriceId: process.env.STRIPE_PROFESSIONAL_PRICE_ID,
     enterprisePriceId: process.env.STRIPE_ENTERPRISE_PRICE_ID,
