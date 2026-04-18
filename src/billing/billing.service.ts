@@ -738,13 +738,13 @@ export class BillingService {
       {
         name: 'Starter',
         stripePriceId: this.configService.get<string>('STRIPE_STARTER_PRICE_ID'),
-        monthlyPrice: 250000, // 2,500 EGP
-        annualPrice: 2400000, // 24,000 EGP/yr (2,000 EGP/mo — save 20%)
+        monthlyPrice: 50000, // 500 EGP per user
+        annualPrice: 480000, // 4,800 EGP/yr per user (400 EGP/mo — save 20%)
         cvLimit: 500,
         aiCallLimit: 1000,
         emailSentLimit: 500,
         emailImportLimit: 1000,
-        userLimit: 3,
+        userLimit: 1, // per-user pricing
         features: {
           emailIntegration: true,
           bulkUpload: true,
@@ -766,7 +766,7 @@ export class BillingService {
         aiCallLimit: 5000,
         emailSentLimit: 2000,
         emailImportLimit: 5000,
-        userLimit: 10,
+        userLimit: 5,
         features: {
           emailIntegration: true,
           bulkUpload: true,
