@@ -738,13 +738,13 @@ export class BillingService {
       {
         name: 'Starter',
         stripePriceId: this.configService.get<string>('STRIPE_STARTER_PRICE_ID'),
-        monthlyPrice: 250000, // 2,500 EGP
-        annualPrice: 2400000, // 24,000 EGP/yr (2,000 EGP/mo — save 20%)
+        monthlyPrice: 50000, // 500 EGP per user
+        annualPrice: 480000, // 4,800 EGP/yr per user (400 EGP/mo — save 20%)
         cvLimit: 500,
         aiCallLimit: 1000,
         emailSentLimit: 500,
         emailImportLimit: 1000,
-        userLimit: 3,
+        userLimit: 1, // per-user pricing
         features: {
           emailIntegration: true,
           bulkUpload: true,
@@ -760,13 +760,13 @@ export class BillingService {
       {
         name: 'Professional',
         stripePriceId: this.configService.get<string>('STRIPE_PROFESSIONAL_PRICE_ID'),
-        monthlyPrice: 550000, // 5,500 EGP
-        annualPrice: 5400000, // 54,000 EGP/yr (4,500 EGP/mo — save 18%)
+        monthlyPrice: 200000, // 2,000 EGP per user
+        annualPrice: 1920000, // 19,200 EGP/yr per user (1,600 EGP/mo — save 20%)
         cvLimit: 2000,
         aiCallLimit: 5000,
         emailSentLimit: 2000,
         emailImportLimit: 5000,
-        userLimit: 10,
+        userLimit: 1, // per-user pricing
         features: {
           emailIntegration: true,
           bulkUpload: true,
@@ -783,8 +783,8 @@ export class BillingService {
       {
         name: 'Enterprise',
         stripePriceId: this.configService.get<string>('STRIPE_ENTERPRISE_PRICE_ID'),
-        monthlyPrice: 1200000, // 12,000 EGP
-        annualPrice: 12000000, // 120,000 EGP/yr (10,000 EGP/mo — save 17%)
+        monthlyPrice: 0, // Custom pricing — contact sales
+        annualPrice: 0,
         cvLimit: -1, // Unlimited
         aiCallLimit: -1, // Unlimited
         emailSentLimit: -1, // Unlimited
