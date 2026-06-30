@@ -111,7 +111,7 @@ export class AiService {
         );
       }
       this.openai = new OpenAI({ apiKey: openaiApiKey || 'dummy-key' });
-      this.model = 'gpt-4-turbo-preview';
+      this.model = 'gpt-5.4-mini';
       console.log(
         `AI Service initialized with OpenAI provider (model: ${this.model})`,
       );
@@ -119,7 +119,12 @@ export class AiService {
   }
 
   /**
-   * Unified chat completion method that works with both OpenAI and Groq
+   * Unified chat completion that works with both OpenAI and Groq.
+   *
+   * OpenAI uses the Responses API (gpt-5.4-mini reasoning model). The `developer`
+   * message carries the role/system instruction and the `user` message carries the
+   * task prompt. Reasoning models do not accept `temperature`, so it is only applied
+   * to the Groq chat-completions path.
    */
   private async chatCompletion(
     prompt: string,
@@ -127,15 +132,28 @@ export class AiService {
       temperature?: number;
       maxTokens?: number;
       jsonMode?: boolean;
+      developerInstruction?: string;
     } = {},
   ): Promise<string> {
-    const { temperature = 0.1, maxTokens, jsonMode = false } = options;
+    const {
+      temperature = 0.1,
+      maxTokens,
+      jsonMode = false,
+      developerInstruction,
+    } = options;
+
+    const developerText =
+      developerInstruction ||
+      'You are RecDesk AI, an expert recruitment assistant for the Egyptian/MENA hiring market. Follow the user instructions precisely and return only the requested output.';
 
     try {
       if (this.provider === 'groq' && this.groq) {
         const response = await this.groq.chat.completions.create({
           model: this.model,
-          messages: [{ role: 'user', content: prompt }],
+          messages: [
+            { role: 'system', content: developerText },
+            { role: 'user', content: prompt },
+          ],
           temperature,
           max_tokens: maxTokens,
           response_format: jsonMode ? { type: 'json_object' } : undefined,
@@ -147,15 +165,35 @@ export class AiService {
         }
         return content;
       } else if (this.openai) {
-        const response = await this.openai.chat.completions.create({
+        const response = await this.openai.responses.create({
           model: this.model,
-          messages: [{ role: 'user', content: prompt }],
-          temperature,
-          max_tokens: maxTokens,
-          response_format: jsonMode ? { type: 'json_object' } : undefined,
+          input: [
+            {
+              role: 'developer',
+              content: [{ type: 'input_text', text: developerText }],
+            },
+            {
+              role: 'user',
+              content: [{ type: 'input_text', text: prompt }],
+            },
+          ],
+          text: {
+            format: jsonMode ? { type: 'json_object' } : { type: 'text' },
+            verbosity: 'medium',
+          },
+          reasoning: {
+            effort: 'medium',
+            summary: 'auto',
+          },
+          tools: [],
+          store: true,
+          include: [
+            'reasoning.encrypted_content',
+            'web_search_call.action.sources',
+          ],
         });
 
-        const content = response.choices[0]?.message?.content;
+        const content = response.output_text?.trim();
         if (!content) {
           throw new Error('No response from OpenAI');
         }
@@ -206,6 +244,8 @@ Only respond with valid JSON, no additional text.`;
       const content = await this.chatCompletion(prompt, {
         temperature: 0.1,
         jsonMode: true,
+        developerInstruction:
+          'You are RecDesk AI, an expert recruitment assistant that analyzes inbound emails to detect job applications for the Egyptian/MENA hiring market. Accurately extract candidate details and respond strictly with the requested JSON object, with no additional text.',
       });
 
       return JSON.parse(content) as EmailClassificationResult;
@@ -288,7 +328,7 @@ Extract and return a JSON object with this structure:
   "summary": string (REQUIRED - a brief 2-3 sentence professional summary highlighting the candidate's key strengths, experience level, and main skills. Always provide this field.)
 }
 
-Be thorough in extracting skills - include technical skills, tools, frameworks, and soft skills.
+Be thorough in extracting skills for ANY profession - include domain/industry skills, tools and software, methodologies, languages, certifications, and soft skills (e.g., technical skills and frameworks for engineers, but equally sales, marketing, finance, design, operations, healthcare, or other domain skills where relevant).
 For experience, list most recent first. Mark "current": true for current positions.
 The summary field is REQUIRED - always generate a professional summary even if the CV content is minimal.
 Only respond with valid JSON, no additional text.`;
@@ -297,6 +337,8 @@ Only respond with valid JSON, no additional text.`;
       const content = await this.chatCompletion(prompt, {
         temperature: 0.1,
         jsonMode: true,
+        developerInstruction:
+          'You are RecDesk AI, an expert CV and resume parser for the Egyptian/MENA hiring market. Extract structured candidate information thoroughly and accurately, and respond strictly with the requested JSON object, with no additional text.',
       });
 
       return JSON.parse(content) as ParsedCVData;
@@ -310,6 +352,7 @@ Only respond with valid JSON, no additional text.`;
     parsedCV: ParsedCVData,
     jobRequirements: {
       title: string;
+      description: string;
       requiredSkills: string[];
       preferredSkills: string[];
       experienceLevel: string;
@@ -323,17 +366,20 @@ ${JSON.stringify(parsedCV, null, 2)}
 
 JOB REQUIREMENTS:
 - Title: ${jobRequirements.title}
+- Description: ${jobRequirements.description}
 - Required Skills: ${jobRequirements.requiredSkills.join(', ')}
 - Preferred Skills: ${jobRequirements.preferredSkills.join(', ')}
 - Experience Level: ${jobRequirements.experienceLevel}
 - Additional Requirements: ${JSON.stringify(jobRequirements.requirements)}
 
+This can be ANY role in ANY industry (e.g., engineering, sales, marketing, finance, HR, operations, design, customer support, healthcare, legal, etc.) and ANY seniority level (intern, entry-level/fresh graduate, junior, mid-level, senior, lead, manager, director, or executive). Judge the candidate against the specific role and level described above - do NOT assume the role is technical and do NOT assume the candidate is a fresh graduate.
+
 SCORING CRITERIA:
-1. Skills Match (40% weight): How well do the candidate's skills match required and preferred skills?
-2. Experience (30% weight): Does their experience level and relevance match the job?
-3. Education (15% weight): Is their educational background appropriate?
-4. Growth Indicators (10% weight): Career progression, learning new skills, certifications
-5. Bonus Signals (5% weight): Portfolio, GitHub, certifications, unique qualifications
+1. Skills Match (40% weight): How well do the candidate's skills match the required and preferred skills? Consider domain knowledge, tools, methodologies, certifications, and relevant soft skills appropriate to this role (e.g., communication and negotiation for sales, financial modeling for finance, stakeholder management for project roles), not only technical/programming skills.
+2. Experience (30% weight): Does the depth, relevance, scope, and seniority of their experience match what this role and level require?
+3. Education (15% weight): Is their educational background, training, or professional qualification appropriate for this role and industry?
+4. Growth Indicators (10% weight): Career progression, increasing responsibility, learning new skills, certifications, and promotions.
+5. Bonus Signals (5% weight): Portfolio, publications, awards, professional memberships, side projects, volunteering, or other unique qualifications relevant to the role.
 
 Return a JSON object:
 {
@@ -353,14 +399,16 @@ Return a JSON object:
   }
 }
 
-Be fair but thorough. Consider semantic skill matching (e.g., "React" matches "React.js").
-For fresh graduates, focus more on education, projects, and potential.
+Be fair but thorough. Consider semantic skill matching across any domain (e.g., "React" matches "React.js", "financial modeling" matches "FP&A", "B2B sales" matches "enterprise account management").
+Calibrate your expectations to the role's experience level: for entry-level or fresh-graduate roles, weight education, internships, projects, and potential more heavily; for mid-level, senior, and leadership roles, weight depth of experience, scope of impact, leadership, and proven results more heavily. Do not penalize a senior candidate for lacking "potential" signals, nor a junior candidate for lacking years of experience the role does not require.
 Only respond with valid JSON, no additional text.`;
 
     try {
       const content = await this.chatCompletion(prompt, {
         temperature: 0.2,
         jsonMode: true,
+        developerInstruction:
+          'You are RecDesk AI, an expert recruiter for the Egyptian/MENA market who objectively scores candidates for roles across ANY industry and ANY seniority level - not only technical or fresh-graduate roles. Calibrate your judgement to the specific role and experience level provided, and respond strictly with the requested JSON object, with no additional text.',
       });
 
       return JSON.parse(content) as CandidateScoreResult;
@@ -382,6 +430,8 @@ Respond with just the summary text, no JSON.`;
       const content = await this.chatCompletion(prompt, {
         temperature: 0.3,
         maxTokens: 200,
+        developerInstruction:
+          'You are RecDesk AI, an expert recruitment assistant. Write a concise, professional 2-3 sentence candidate summary in plain text only, with no preamble or formatting.',
       });
 
       return content || 'Summary not available';

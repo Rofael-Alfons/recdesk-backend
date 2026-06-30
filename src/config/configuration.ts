@@ -119,17 +119,27 @@ export default () => ({
     model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile', // Fast and capable model
   },
 
-  sendgrid: {
-    apiKey:
+  // Email sending via AWS SES (reuses AWS credentials from the `aws` block).
+  // SES_REGION can override the default AWS region (SES is region-specific).
+  // fromEmail must be a verified SES identity.
+  ses: {
+    region:
       process.env.NODE_ENV === 'production'
-        ? process.env.SENDGRID_API_KEY_PROD || process.env.SENDGRID_API_KEY
-        : process.env.SENDGRID_API_KEY,
+        ? process.env.SES_REGION_PROD ||
+          process.env.SES_REGION ||
+          process.env.AWS_REGION ||
+          'eu-central-1'
+        : process.env.SES_REGION ||
+          process.env.AWS_REGION ||
+          'eu-central-1',
     fromEmail:
       process.env.NODE_ENV === 'production'
-        ? process.env.SENDGRID_FROM_EMAIL_PROD ||
-          process.env.SENDGRID_FROM_EMAIL ||
+        ? process.env.SES_FROM_EMAIL_PROD ||
+          process.env.SES_FROM_EMAIL ||
           'noreply@recdesk.io'
-        : process.env.SENDGRID_FROM_EMAIL || 'noreply@recdesk.io',
+        : process.env.SES_FROM_EMAIL || 'noreply@recdesk.io',
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
 
   // Google (for Gmail email integration)
