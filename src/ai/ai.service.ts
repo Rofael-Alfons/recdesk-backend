@@ -352,7 +352,7 @@ Only respond with valid JSON, no additional text.`;
     parsedCV: ParsedCVData,
     jobRequirements: {
       title: string;
-      description: string;
+      description?: string;
       requiredSkills: string[];
       preferredSkills: string[];
       experienceLevel: string;
@@ -366,7 +366,7 @@ ${JSON.stringify(parsedCV, null, 2)}
 
 JOB REQUIREMENTS:
 - Title: ${jobRequirements.title}
-- Description: ${jobRequirements.description}
+- Description: ${jobRequirements.description || 'N/A'}
 - Required Skills: ${jobRequirements.requiredSkills.join(', ')}
 - Preferred Skills: ${jobRequirements.preferredSkills.join(', ')}
 - Experience Level: ${jobRequirements.experienceLevel}
