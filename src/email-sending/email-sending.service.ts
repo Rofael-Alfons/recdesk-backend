@@ -13,7 +13,7 @@ import {
 } from './template-engine.service';
 import { BillingService } from '../billing/billing.service';
 import { SendEmailDto, BulkSendEmailDto, PreviewEmailDto } from './dto';
-import sgMail from '@sendgrid/mail';
+import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 
 export interface SendResult {
   candidateId: string;
@@ -28,6 +28,7 @@ export class EmailSendingService {
   private readonly logger = new Logger(EmailSendingService.name);
   private readonly fromEmail: string;
   private readonly isConfigured: boolean;
+  private readonly sesClient?: SESv2Client;
 
   constructor(
     private prisma: PrismaService,
@@ -36,19 +37,25 @@ export class EmailSendingService {
     private templateEngine: TemplateEngineService,
     private billingService: BillingService,
   ) {
-    const apiKey = this.configService.get<string>('sendgrid.apiKey');
+    const region = this.configService.get<string>('ses.region');
+    const accessKeyId = this.configService.get<string>('ses.accessKeyId');
+    const secretAccessKey = this.configService.get<string>(
+      'ses.secretAccessKey',
+    );
     this.fromEmail =
-      this.configService.get<string>('sendgrid.fromEmail') ||
-      'noreply@recdesk.io';
+      this.configService.get<string>('ses.fromEmail') || 'noreply@recdesk.io';
 
-    if (apiKey) {
-      sgMail.setApiKey(apiKey);
+    if (region && accessKeyId && secretAccessKey) {
+      this.sesClient = new SESv2Client({
+        region,
+        credentials: { accessKeyId, secretAccessKey },
+      });
       this.isConfigured = true;
-      this.logger.log('SendGrid configured successfully');
+      this.logger.log('AWS SES configured successfully');
     } else {
       this.isConfigured = false;
       this.logger.warn(
-        'SendGrid API key not configured - emails will be logged only',
+        'AWS SES not configured - emails will be logged only',
       );
     }
   }
@@ -403,14 +410,14 @@ export class EmailSendingService {
   }
 
   /**
-   * Send email via SendGrid or log if not configured
+   * Send email via AWS SES or log if not configured
    */
   private async sendViaProvider(
     to: string,
     subject: string,
     body: string,
   ): Promise<{ success: boolean; error?: string }> {
-    if (!this.isConfigured) {
+    if (!this.isConfigured || !this.sesClient) {
       // Log email for development
       this.logger.log(`[DEV MODE] Email would be sent to: ${to}`);
       this.logger.log(`[DEV MODE] Subject: ${subject}`);
@@ -419,13 +426,24 @@ export class EmailSendingService {
     }
 
     try {
-      await sgMail.send({
-        to,
-        from: this.fromEmail,
-        subject,
-        text: body,
-        html: body.replace(/\n/g, '<br>'),
-      });
+      await this.sesClient.send(
+        new SendEmailCommand({
+          FromEmailAddress: this.fromEmail,
+          Destination: { ToAddresses: [to] },
+          Content: {
+            Simple: {
+              Subject: { Data: subject, Charset: 'UTF-8' },
+              Body: {
+                Text: { Data: body, Charset: 'UTF-8' },
+                Html: {
+                  Data: body.replace(/\n/g, '<br>'),
+                  Charset: 'UTF-8',
+                },
+              },
+            },
+          },
+        }),
+      );
 
       this.logger.log(`Email sent successfully to: ${to}`);
       return { success: true };

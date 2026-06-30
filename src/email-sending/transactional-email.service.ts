@@ -1,13 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import sgMail from '@sendgrid/mail';
+import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 
 /**
  * TransactionalEmailService handles system-level emails:
  * - Password reset
  * - User invitation
  *
- * Falls back to console logging when SendGrid is not configured (dev mode).
+ * Falls back to console logging when AWS SES is not configured (dev mode).
  */
 @Injectable()
 export class TransactionalEmailService {
@@ -15,23 +15,30 @@ export class TransactionalEmailService {
   private readonly fromEmail: string;
   private readonly isConfigured: boolean;
   private readonly frontendUrl: string;
+  private readonly sesClient?: SESv2Client;
 
   constructor(private configService: ConfigService) {
-    const apiKey = this.configService.get<string>('sendgrid.apiKey');
+    const region = this.configService.get<string>('ses.region');
+    const accessKeyId = this.configService.get<string>('ses.accessKeyId');
+    const secretAccessKey = this.configService.get<string>(
+      'ses.secretAccessKey',
+    );
     this.fromEmail =
-      this.configService.get<string>('sendgrid.fromEmail') ||
-      'noreply@recdesk.io';
+      this.configService.get<string>('ses.fromEmail') || 'noreply@recdesk.io';
     this.frontendUrl =
       this.configService.get<string>('frontend.url') || 'http://localhost:3001';
 
-    if (apiKey && apiKey !== 'your-sendgrid-api-key') {
-      sgMail.setApiKey(apiKey);
+    if (region && accessKeyId && secretAccessKey) {
+      this.sesClient = new SESv2Client({
+        region,
+        credentials: { accessKeyId, secretAccessKey },
+      });
       this.isConfigured = true;
-      this.logger.log('TransactionalEmailService: SendGrid configured');
+      this.logger.log('TransactionalEmailService: AWS SES configured');
     } else {
       this.isConfigured = false;
       this.logger.warn(
-        'TransactionalEmailService: SendGrid not configured - emails will be logged only',
+        'TransactionalEmailService: AWS SES not configured - emails will be logged only',
       );
     }
   }
@@ -105,7 +112,7 @@ export class TransactionalEmailService {
     html: string,
     text: string,
   ): Promise<{ success: boolean; error?: string }> {
-    if (!this.isConfigured) {
+    if (!this.isConfigured || !this.sesClient) {
       this.logger.log(`[DEV MODE] Transactional email would be sent to: ${to}`);
       this.logger.log(`[DEV MODE] Subject: ${subject}`);
       this.logger.debug(
@@ -115,22 +122,31 @@ export class TransactionalEmailService {
     }
 
     try {
-      await sgMail.send({
-        to,
-        from: { email: this.fromEmail, name: 'RecDesk' },
-        subject,
-        text,
-        html,
-      });
+      await this.sesClient.send(
+        new SendEmailCommand({
+          FromEmailAddress: `RecDesk <${this.fromEmail}>`,
+          Destination: { ToAddresses: [to] },
+          Content: {
+            Simple: {
+              Subject: { Data: subject, Charset: 'UTF-8' },
+              Body: {
+                Text: { Data: text, Charset: 'UTF-8' },
+                Html: { Data: html, Charset: 'UTF-8' },
+              },
+            },
+          },
+        }),
+      );
       this.logger.log(`Transactional email sent to: ${to} (${subject})`);
       return { success: true };
     } catch (error: any) {
+      const detail = error.message;
       this.logger.error(
-        `Failed to send transactional email to ${to}: ${error.message}`,
+        `Failed to send transactional email to ${to}: ${detail}`,
       );
       return {
         success: false,
-        error: error.message || 'Failed to send email',
+        error: detail || 'Failed to send email',
       };
     }
   }
