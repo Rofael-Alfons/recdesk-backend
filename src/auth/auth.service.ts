@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -10,7 +11,13 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
+import { AllowlistService } from '../allowlist/allowlist.service';
 import { TransactionalEmailService } from '../email-sending/transactional-email.service';
+
+// Shown when an email is not on the access allowlist. Kept as a stable string
+// so the frontend can recognize non-approval and surface a waitlist link.
+export const NOT_ALLOWED_MESSAGE =
+  'This email is not approved for access yet. Join the waitlist at /waitlist to request access.';
 import {
   RegisterDto,
   LoginDto,
@@ -40,10 +47,16 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private allowlistService: AllowlistService,
     private transactionalEmailService: TransactionalEmailService,
   ) {}
 
   async register(dto: RegisterDto) {
+    // Gate registration behind the access allowlist
+    if (!(await this.allowlistService.isAllowed(dto.email))) {
+      throw new ForbiddenException(NOT_ALLOWED_MESSAGE);
+    }
+
     // Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
@@ -107,6 +120,11 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
+    // Gate login behind the access allowlist
+    if (!(await this.allowlistService.isAllowed(dto.email))) {
+      throw new ForbiddenException(NOT_ALLOWED_MESSAGE);
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
       include: { company: true },
@@ -177,6 +195,16 @@ export class AuthService {
 
     if (!refreshToken.user.isActive) {
       throw new UnauthorizedException('Account is deactivated');
+    }
+
+    // Re-check the allowlist on refresh so access is revoked within the
+    // access-token lifetime once an email is removed from the allowlist (and so
+    // any accounts created before allowlisting was enforced are locked out).
+    if (!(await this.allowlistService.isAllowed(refreshToken.user.email))) {
+      await this.prisma.refreshToken.deleteMany({
+        where: { userId: refreshToken.user.id },
+      });
+      throw new ForbiddenException(NOT_ALLOWED_MESSAGE);
     }
 
     // Delete old refresh token (use deleteMany to avoid error if already deleted)
@@ -385,6 +413,11 @@ export class AuthService {
   }> {
     const email = profile.email.toLowerCase();
     const providerIdField = provider === 'google' ? 'googleId' : 'microsoftId';
+
+    // Gate OAuth sign-in / sign-up behind the access allowlist
+    if (!(await this.allowlistService.isAllowed(email))) {
+      throw new ForbiddenException(NOT_ALLOWED_MESSAGE);
+    }
 
     // First, try to find user by provider ID
     let user = await this.prisma.user.findFirst({

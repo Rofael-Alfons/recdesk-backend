@@ -20,7 +20,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "db:seed": "ts-node prisma/seed.ts",
     "db:reset": "prisma migrate reset --force",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "allowlist": "ts-node -r tsconfig-paths/register src/scripts/manage-allowlist.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

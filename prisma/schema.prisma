@@ -652,3 +652,27 @@ model WaitlistSubscriber {
   @@index([subscribedAt])
   @@map("waitlist_subscribers")
 }
+
+// ============================================
+// ACCESS ALLOWLIST
+// ============================================
+
+// Gates registration and login. Only emails that match an entry here
+// (by exact EMAIL or by DOMAIN) are permitted to create an account or sign in.
+model AllowedEmail {
+  id        String             @id @default(uuid())
+  // For EMAIL entries: the full lowercased email (e.g. "user@acme.com").
+  // For DOMAIN entries: the lowercased domain without the leading "@" (e.g. "acme.com").
+  value     String             @unique
+  type      AllowlistEntryType
+  note      String?
+  createdAt DateTime           @default(now())
+
+  @@index([type])
+  @@map("allowed_emails")
+}
+
+enum AllowlistEntryType {
+  EMAIL
+  DOMAIN
+}

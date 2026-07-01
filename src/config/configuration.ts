@@ -266,4 +266,15 @@ export default () => ({
     welcomeEmailEnabled:
       process.env.WAITLIST_WELCOME_EMAIL_ENABLED !== 'false', // Default: true
   },
+
+  // Access allowlist gating for registration/login.
+  // Comma-separated list of allowed emails and/or domains used to seed the
+  // `allowed_emails` table on startup. Domains may be written as "@acme.com"
+  // or "acme.com"; individual emails as "user@acme.com".
+  auth: {
+    allowlist:
+      process.env.NODE_ENV === 'production'
+        ? process.env.AUTH_ALLOWLIST_PROD || process.env.AUTH_ALLOWLIST
+        : process.env.AUTH_ALLOWLIST,
+  },
 });
