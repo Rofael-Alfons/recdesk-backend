@@ -14,6 +14,8 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { EmailMonitorService } from './email-monitor.service';
+import { OutlookMonitorService } from './outlook-monitor.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UsageType } from '@prisma/client';
 import {
@@ -32,7 +34,11 @@ interface AuthUser {
 @ApiBearerAuth()
 @Controller('integrations/gmail')
 export class EmailMonitorController {
-  constructor(private emailMonitorService: EmailMonitorService) {}
+  constructor(
+    private emailMonitorService: EmailMonitorService,
+    private outlookMonitorService: OutlookMonitorService,
+    private prisma: PrismaService,
+  ) {}
 
   @Post('sync')
   @HttpCode(HttpStatus.OK)
@@ -41,10 +47,14 @@ export class EmailMonitorController {
   @ApiOperation({ summary: 'Manually trigger email sync for all connections' })
   @ApiResponse({ status: 200, description: 'Sync completed successfully' })
   async triggerSync(@CurrentUser() user: AuthUser) {
-    const result = await this.emailMonitorService.syncAllConnectionsForCompany(
-      user.companyId,
-    );
-    return result;
+    const [gmail, outlook] = await Promise.all([
+      this.emailMonitorService.syncAllConnectionsForCompany(user.companyId),
+      this.outlookMonitorService.syncAllConnectionsForCompany(user.companyId),
+    ]);
+    return {
+      results: [...gmail.results, ...outlook.results],
+      totalImported: gmail.totalImported + outlook.totalImported,
+    };
   }
 
   @Post('sync/:connectionId')
@@ -59,11 +69,22 @@ export class EmailMonitorController {
     @Param('connectionId') connectionId: string,
     @CurrentUser() user: AuthUser,
   ) {
-    const result = await this.emailMonitorService.pollEmailsForConnection(
+    const connection = await this.prisma.emailConnection.findFirst({
+      where: { id: connectionId, companyId: user.companyId },
+      select: { provider: true },
+    });
+
+    if (connection?.provider === 'OUTLOOK') {
+      return this.outlookMonitorService.pollEmailsForConnection(
+        connectionId,
+        user.companyId,
+      );
+    }
+
+    return this.emailMonitorService.pollEmailsForConnection(
       connectionId,
       user.companyId,
     );
-    return result;
   }
 
   @Get('status')

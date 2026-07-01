@@ -8,6 +8,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { MicrosoftStrategy } from './strategies/microsoft.strategy';
 import { EmailSendingModule } from '../email-sending/email-sending.module';
+import { AllowlistModule } from '../allowlist/allowlist.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { EmailSendingModule } from '../email-sending/email-sending.module';
       inject: [ConfigService],
     }),
     EmailSendingModule,
+    AllowlistModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, GoogleStrategy, MicrosoftStrategy],
