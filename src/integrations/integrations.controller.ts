@@ -26,8 +26,7 @@ import { OutlookGraphService } from '../email-monitor/outlook-graph.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserData } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
-import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { ConfigService } from '@nestjs/config';
 import { UpdateConnectionDto } from './dto/update-connection.dto';
 
@@ -60,7 +59,7 @@ export class IntegrationsController {
   // ==========================================
 
   @Get('gmail/connect')
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('manageIntegrations')
   @ApiOperation({ summary: 'Get Gmail OAuth URL' })
   @ApiResponse({ status: 200, description: 'OAuth URL generated' })
   async connectGmail(@CurrentUser() user: CurrentUserData) {
@@ -124,7 +123,7 @@ export class IntegrationsController {
   // ==========================================
 
   @Get('outlook/connect')
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('manageIntegrations')
   @ApiOperation({ summary: 'Get Outlook OAuth URL' })
   @ApiResponse({ status: 200, description: 'OAuth URL generated' })
   async connectOutlook(@CurrentUser() user: CurrentUserData) {
@@ -191,7 +190,7 @@ export class IntegrationsController {
   // ==========================================
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('manageIntegrations')
   @ApiOperation({ summary: 'Update email connection settings' })
   @ApiResponse({ status: 200, description: 'Connection updated' })
   @ApiResponse({ status: 404, description: 'Connection not found' })
@@ -208,7 +207,7 @@ export class IntegrationsController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('manageIntegrations')
   @ApiOperation({ summary: 'Disconnect email integration' })
   @ApiResponse({ status: 200, description: 'Email disconnected' })
   @ApiResponse({ status: 404, description: 'Connection not found' })

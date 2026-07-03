@@ -19,8 +19,8 @@ import {
 import { UploadService } from './upload.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserData } from '../common/decorators/current-user.decorator';
-import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole, UsageType } from '@prisma/client';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
+import { UsageType } from '@prisma/client';
 import {
   SubscriptionGuard,
   UsageCheck,
@@ -33,7 +33,7 @@ export class UploadController {
   constructor(private uploadService: UploadService) {}
 
   @Post('cvs')
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('uploadCVs')
   @UseGuards(SubscriptionGuard)
   @UsageCheck(UsageType.CV_PROCESSED)
   @UseInterceptors(

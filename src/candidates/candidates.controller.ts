@@ -30,8 +30,8 @@ import {
 } from './dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserData } from '../common/decorators/current-user.decorator';
-import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole, UsageType } from '@prisma/client';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
+import { UsageType } from '@prisma/client';
 import {
   SubscriptionGuard,
   UsageCheck,
@@ -44,7 +44,7 @@ export class CandidatesController {
   constructor(private candidatesService: CandidatesService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('manageCandidates')
   @UseGuards(SubscriptionGuard)
   @UsageCheck(UsageType.CV_PROCESSED)
   @ApiOperation({ summary: 'Create a new candidate' })
@@ -74,7 +74,7 @@ export class CandidatesController {
   }
 
   @Post('bulk/status')
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('reviewCandidates')
   @ApiOperation({ summary: 'Bulk update candidate status' })
   @ApiResponse({ status: 200, description: 'Candidates updated' })
   async bulkUpdateStatus(
@@ -89,7 +89,7 @@ export class CandidatesController {
   }
 
   @Post('bulk/tags')
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('manageCandidates')
   @ApiOperation({ summary: 'Bulk add tags to candidates' })
   @ApiResponse({ status: 200, description: 'Tags added' })
   async bulkAddTags(
@@ -100,7 +100,7 @@ export class CandidatesController {
   }
 
   @Post('bulk/assign-job')
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('manageCandidates')
   @ApiOperation({ summary: 'Bulk assign candidates to job' })
   @ApiResponse({ status: 200, description: 'Candidates assigned' })
   async bulkAssignJob(
@@ -122,7 +122,7 @@ export class CandidatesController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('manageCandidates')
   @ApiOperation({ summary: 'Update candidate by ID' })
   @ApiResponse({ status: 200, description: 'Candidate updated' })
   @ApiResponse({ status: 404, description: 'Candidate not found' })
@@ -135,7 +135,7 @@ export class CandidatesController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('manageCandidates')
   @ApiOperation({ summary: 'Delete candidate by ID' })
   @ApiResponse({ status: 200, description: 'Candidate deleted' })
   @ApiResponse({ status: 404, description: 'Candidate not found' })
@@ -147,6 +147,7 @@ export class CandidatesController {
   }
 
   @Post(':id/notes')
+  @RequirePermissions('reviewCandidates')
   @ApiOperation({ summary: 'Add note to candidate' })
   @ApiResponse({ status: 201, description: 'Note added' })
   async addNote(
@@ -158,7 +159,7 @@ export class CandidatesController {
   }
 
   @Post(':id/rescore')
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('manageCandidates')
   @UseGuards(SubscriptionGuard)
   @UsageCheck(UsageType.AI_SCORING_CALL)
   @HttpCode(HttpStatus.ACCEPTED)

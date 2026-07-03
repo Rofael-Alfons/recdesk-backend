@@ -70,6 +70,47 @@ export class UsersController {
     return this.usersService.invite(dto, user.companyId, user.id, user.role as UserRole);
   }
 
+  @Get('invitations')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'List pending invitations' })
+  @ApiResponse({ status: 200, description: 'Pending invitations retrieved' })
+  async listInvitations(@CurrentUser() user: CurrentUserData) {
+    return this.usersService.listInvitations(user.companyId);
+  }
+
+  @Post('invitations/:id/resend')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Resend a pending invitation' })
+  @ApiResponse({ status: 201, description: 'Invitation resent' })
+  @ApiResponse({ status: 404, description: 'Invitation not found' })
+  async resendInvitation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.usersService.resendInvitation(
+      id,
+      user.companyId,
+      user.id,
+      user.role as UserRole,
+    );
+  }
+
+  @Delete('invitations/:id')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Revoke a pending invitation' })
+  @ApiResponse({ status: 200, description: 'Invitation revoked' })
+  @ApiResponse({ status: 404, description: 'Invitation not found' })
+  async revokeInvitation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.usersService.revokeInvitation(
+      id,
+      user.companyId,
+      user.role as UserRole,
+    );
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get user by ID' })
   @ApiResponse({ status: 200, description: 'User details retrieved' })

@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Get,
+  Query,
   UseGuards,
   Req,
   Res,
@@ -20,6 +21,7 @@ import {
   RefreshTokenDto,
   ForgotPasswordDto,
   ResetPasswordDto,
+  AcceptInvitationDto,
 } from './dto';
 import { Public } from '../common/decorators/public.decorator';
 import {
@@ -121,6 +123,32 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Invalid or expired token' })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  // ============================================
+  // INVITATIONS
+  // ============================================
+
+  @Public()
+  @ThrottleAuth()
+  @Get('invitation')
+  @ApiOperation({ summary: 'Get a pending invitation by token' })
+  @ApiResponse({ status: 200, description: 'Invitation details retrieved' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired invitation' })
+  async getInvitation(@Query('token') token: string) {
+    return this.authService.getInvitation(token);
+  }
+
+  @Public()
+  @ThrottleAuth()
+  @Post('accept-invitation')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Accept an invitation and set a password' })
+  @ApiResponse({ status: 200, description: 'Invitation accepted, user logged in' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired invitation' })
+  @ApiResponse({ status: 409, description: 'Account already exists' })
+  async acceptInvitation(@Body() dto: AcceptInvitationDto) {
+    return this.authService.acceptInvitation(dto);
   }
 
   // ============================================

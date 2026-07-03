@@ -13,6 +13,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import { AllowlistService } from '../allowlist/allowlist.service';
 import { TransactionalEmailService } from '../email-sending/transactional-email.service';
+import { PermissionsService } from '../permissions/permissions.service';
+import { UserRole } from '@prisma/client';
 
 // Shown when an email is not on the access allowlist. Kept as a stable string
 // so the frontend can recognize non-approval and surface a waitlist link.
@@ -24,6 +26,7 @@ import {
   RefreshTokenDto,
   ForgotPasswordDto,
   ResetPasswordDto,
+  AcceptInvitationDto,
 } from './dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import * as crypto from 'crypto';
@@ -49,6 +52,7 @@ export class AuthService {
     private configService: ConfigService,
     private allowlistService: AllowlistService,
     private transactionalEmailService: TransactionalEmailService,
+    private permissionsService: PermissionsService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -101,6 +105,11 @@ export class AuthService {
     // Generate tokens
     const tokens = await this.generateTokens(result);
 
+    const permissions = await this.permissionsService.getUserPermissions(
+      result.companyId,
+      result.role as UserRole,
+    );
+
     return {
       user: {
         id: result.id,
@@ -108,6 +117,7 @@ export class AuthService {
         firstName: result.firstName,
         lastName: result.lastName,
         role: result.role,
+        permissions,
         company: {
           id: result.company.id,
           name: result.company.name,
@@ -156,6 +166,11 @@ export class AuthService {
 
     const tokens = await this.generateTokens(user);
 
+    const permissions = await this.permissionsService.getUserPermissions(
+      user.companyId,
+      user.role as UserRole,
+    );
+
     return {
       user: {
         id: user.id,
@@ -164,6 +179,7 @@ export class AuthService {
         lastName: user.lastName,
         role: user.role,
         avatarUrl: user.avatarUrl,
+        permissions,
         company: {
           id: user.company.id,
           name: user.company.name,
@@ -215,6 +231,11 @@ export class AuthService {
     // Generate new tokens
     const tokens = await this.generateTokens(refreshToken.user);
 
+    const permissions = await this.permissionsService.getUserPermissions(
+      refreshToken.user.companyId,
+      refreshToken.user.role as UserRole,
+    );
+
     return {
       user: {
         id: refreshToken.user.id,
@@ -222,6 +243,7 @@ export class AuthService {
         firstName: refreshToken.user.firstName,
         lastName: refreshToken.user.lastName,
         role: refreshToken.user.role,
+        permissions,
         company: {
           id: refreshToken.user.company.id,
           name: refreshToken.user.company.name,
@@ -395,6 +417,134 @@ export class AuthService {
   }
 
   /**
+   * Look up a pending invitation by token for the accept-invite page.
+   * Lazily marks expired invitations as EXPIRED.
+   */
+  async getInvitation(token: string) {
+    const invitation = await this.prisma.invitation.findUnique({
+      where: { token },
+      include: { company: { select: { name: true } } },
+    });
+
+    if (!invitation || invitation.status === 'REVOKED') {
+      throw new BadRequestException('This invitation is no longer valid');
+    }
+
+    if (invitation.status === 'ACCEPTED') {
+      throw new BadRequestException(
+        'This invitation has already been accepted. Please log in.',
+      );
+    }
+
+    if (invitation.expiresAt < new Date()) {
+      if (invitation.status !== 'EXPIRED') {
+        await this.prisma.invitation.update({
+          where: { id: invitation.id },
+          data: { status: 'EXPIRED' },
+        });
+      }
+      throw new BadRequestException('This invitation has expired');
+    }
+
+    return {
+      email: invitation.email,
+      firstName: invitation.firstName,
+      lastName: invitation.lastName,
+      role: invitation.role,
+      companyName: invitation.company.name,
+    };
+  }
+
+  /**
+   * Accept a pending invitation: create the user with the invited role +
+   * company, mark the invitation accepted, and log the user in.
+   */
+  async acceptInvitation(dto: AcceptInvitationDto) {
+    const invitation = await this.prisma.invitation.findUnique({
+      where: { token: dto.token },
+    });
+
+    if (!invitation || invitation.status === 'REVOKED') {
+      throw new BadRequestException('This invitation is no longer valid');
+    }
+
+    if (invitation.status === 'ACCEPTED') {
+      throw new BadRequestException(
+        'This invitation has already been accepted. Please log in.',
+      );
+    }
+
+    if (invitation.expiresAt < new Date()) {
+      await this.prisma.invitation.updateMany({
+        where: { id: invitation.id, status: { not: 'EXPIRED' } },
+        data: { status: 'EXPIRED' },
+      });
+      throw new BadRequestException('This invitation has expired');
+    }
+
+    // Guard against an account already existing for this email
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: invitation.email },
+    });
+
+    if (existingUser) {
+      throw new ConflictException(
+        'An account with this email already exists. Please log in.',
+      );
+    }
+
+    const saltRounds =
+      this.configService.get<number>('bcrypt.saltRounds') || 12;
+    const passwordHash = await bcrypt.hash(dto.password, saltRounds);
+
+    const user = await this.prisma.$transaction(async (prisma) => {
+      const created = await prisma.user.create({
+        data: {
+          email: invitation.email,
+          passwordHash,
+          firstName: dto.firstName || invitation.firstName,
+          lastName: dto.lastName || invitation.lastName,
+          role: invitation.role,
+          companyId: invitation.companyId,
+        },
+        include: { company: true },
+      });
+
+      await prisma.invitation.update({
+        where: { id: invitation.id },
+        data: { status: 'ACCEPTED', acceptedAt: new Date() },
+      });
+
+      return created;
+    });
+
+    const tokens = await this.generateTokens(user);
+
+    const permissions = await this.permissionsService.getUserPermissions(
+      user.companyId,
+      user.role as UserRole,
+    );
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        permissions,
+        company: {
+          id: user.company.id,
+          name: user.company.name,
+          mode: user.company.mode,
+          plan: user.company.plan,
+        },
+      },
+      ...tokens,
+    };
+  }
+
+  /**
    * Validate OAuth user - find existing user or create new one
    * Handles account linking if user exists with same email
    */
@@ -549,6 +699,11 @@ export class AuthService {
 
     const tokens = await this.generateTokens(fullUser);
 
+    const permissions = await this.permissionsService.getUserPermissions(
+      fullUser.companyId,
+      fullUser.role as UserRole,
+    );
+
     return {
       user: {
         id: fullUser.id,
@@ -557,6 +712,7 @@ export class AuthService {
         lastName: fullUser.lastName,
         role: fullUser.role,
         avatarUrl: fullUser.avatarUrl,
+        permissions,
         company: {
           id: fullUser.company.id,
           name: fullUser.company.name,

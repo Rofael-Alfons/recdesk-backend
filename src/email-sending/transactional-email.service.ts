@@ -78,25 +78,23 @@ export class TransactionalEmailService {
    */
   async sendUserInvitationEmail(
     email: string,
-    tempPassword: string,
+    acceptLink: string,
     inviterName: string,
     companyName: string,
+    roleLabel: string,
   ): Promise<{ success: boolean; error?: string }> {
     const subject = `You've been invited to join ${companyName} on RecDesk`;
-    const loginUrl = `${this.frontendUrl}/auth/login`;
     const html = this.buildInvitationHtml(
-      email,
-      tempPassword,
       inviterName,
       companyName,
-      loginUrl,
+      roleLabel,
+      acceptLink,
     );
     const text = this.buildInvitationText(
-      email,
-      tempPassword,
       inviterName,
       companyName,
-      loginUrl,
+      roleLabel,
+      acceptLink,
     );
 
     return this.send(email, subject, html, text);
@@ -263,57 +261,44 @@ export class TransactionalEmailService {
   }
 
   private buildInvitationHtml(
-    email: string,
-    tempPassword: string,
     inviterName: string,
     companyName: string,
-    loginUrl: string,
+    roleLabel: string,
+    acceptLink: string,
   ): string {
     const content = `
       <p style="margin:0 0 16px;">Hi there,</p>
-      <p style="margin:0 0 16px;"><strong>${inviterName}</strong> has invited you to join <strong>${companyName}</strong> on RecDesk.</p>
-      <p style="margin:0 0 8px;">Here are your temporary login credentials:</p>
-      <table cellpadding="0" cellspacing="0" style="margin:8px 0 24px;background-color:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;width:100%;">
-        <tr>
-          <td style="padding:16px 20px;">
-            <p style="margin:0 0 8px;font-size:13px;color:#64748B;">Email</p>
-            <p style="margin:0 0 16px;font-weight:600;">${email}</p>
-            <p style="margin:0 0 8px;font-size:13px;color:#64748B;">Temporary Password</p>
-            <p style="margin:0;font-weight:600;font-family:monospace;font-size:16px;letter-spacing:1px;">${tempPassword}</p>
-          </td>
-        </tr>
-      </table>
+      <p style="margin:0 0 16px;"><strong>${inviterName}</strong> has invited you to join <strong>${companyName}</strong> on RecDesk as a <strong>${roleLabel}</strong>.</p>
+      <p style="margin:0 0 24px;">Click the button below to set your password and activate your account.</p>
       <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
         <tr>
           <td style="background-color:#1E40AF;border-radius:6px;">
-            <a href="${loginUrl}" style="display:inline-block;padding:12px 28px;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;">Log In to RecDesk</a>
+            <a href="${acceptLink}" style="display:inline-block;padding:12px 28px;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;">Accept Invitation</a>
           </td>
         </tr>
       </table>
-      <p style="margin:0 0 16px;color:#64748B;font-size:13px;">We recommend changing your password after your first login.</p>`;
+      <p style="margin:0 0 8px;color:#64748B;font-size:13px;">Or copy and paste this link into your browser:</p>
+      <p style="margin:0 0 16px;color:#3B82F6;font-size:13px;word-break:break-all;">${acceptLink}</p>
+      <p style="margin:0 0 16px;color:#64748B;font-size:13px;">This invitation expires in 7 days. If you weren't expecting it, you can safely ignore this email.</p>`;
 
     return this.baseWrapper(content);
   }
 
   private buildInvitationText(
-    email: string,
-    tempPassword: string,
     inviterName: string,
     companyName: string,
-    loginUrl: string,
+    roleLabel: string,
+    acceptLink: string,
   ): string {
     return [
       'Hi there,',
       '',
-      `${inviterName} has invited you to join ${companyName} on RecDesk.`,
+      `${inviterName} has invited you to join ${companyName} on RecDesk as a ${roleLabel}.`,
       '',
-      'Your temporary login credentials:',
-      `  Email: ${email}`,
-      `  Password: ${tempPassword}`,
+      'Set your password and activate your account here:',
+      `  ${acceptLink}`,
       '',
-      `Log in here: ${loginUrl}`,
-      '',
-      'We recommend changing your password after your first login.',
+      "This invitation expires in 7 days. If you weren't expecting it, you can safely ignore this email.",
       '',
       '-- RecDesk AI',
     ].join('\n');

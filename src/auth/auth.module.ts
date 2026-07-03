@@ -9,6 +9,7 @@ import { GoogleStrategy } from './strategies/google.strategy';
 import { MicrosoftStrategy } from './strategies/microsoft.strategy';
 import { EmailSendingModule } from '../email-sending/email-sending.module';
 import { AllowlistModule } from '../allowlist/allowlist.module';
+import { PermissionsModule } from '../permissions/permissions.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { AllowlistModule } from '../allowlist/allowlist.module';
     }),
     EmailSendingModule,
     AllowlistModule,
+    PermissionsModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, GoogleStrategy, MicrosoftStrategy],
