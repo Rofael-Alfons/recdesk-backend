@@ -33,6 +33,8 @@ model Company {
   usageRecords     UsageRecord[]
   emailTemplates   EmailTemplate[]
   notifications    Notification[]
+  invitations      Invitation[]
+  rolePermissions  RolePermission[]
 
   @@map("companies")
 }
@@ -74,6 +76,7 @@ model User {
   refreshTokens        RefreshToken[]
   passwordResetTokens  PasswordResetToken[]
   notifications        Notification[]
+  sentInvitations      Invitation[]         @relation("InvitationInviter")
 
   @@index([companyId])
   @@index([googleId])
@@ -84,8 +87,52 @@ model User {
 enum UserRole {
   ADMIN
   RECRUITER
-  INTERVIEWER
+  HIRING_MANAGER
   VIEWER
+}
+
+model Invitation {
+  id          String           @id @default(uuid())
+  email       String
+  firstName   String
+  lastName    String
+  role        UserRole         @default(RECRUITER)
+  token       String           @unique
+  status      InvitationStatus @default(PENDING)
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  companyId   String
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invitedById String?
+  invitedBy   User?   @relation("InvitationInviter", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@index([email])
+  @@index([companyId, status])
+  @@map("invitations")
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+model RolePermission {
+  id         String   @id @default(uuid())
+  companyId  String
+  role       UserRole
+  permission String
+  createdAt  DateTime @default(now())
+
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, role, permission])
+  @@index([companyId])
+  @@map("role_permissions")
 }
 
 model RefreshToken {

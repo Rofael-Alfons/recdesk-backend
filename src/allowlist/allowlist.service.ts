@@ -54,6 +54,33 @@ export class AllowlistService implements OnModuleInit {
   }
 
   /**
+   * Ensures the given email is permitted (adds an exact EMAIL entry if not
+   * already covered). Used when inviting a teammate so they can accept the
+   * invitation and log in regardless of the global allowlist configuration.
+   */
+  async allow(email: string, note = 'Invited teammate'): Promise<void> {
+    const normalized = email.trim().toLowerCase();
+    if (!normalized || !normalized.includes('@')) {
+      return;
+    }
+
+    // Skip if already allowed (exact email or domain match).
+    if (await this.isAllowed(normalized)) {
+      return;
+    }
+
+    await this.prisma.allowedEmail.upsert({
+      where: { value: normalized },
+      update: {},
+      create: {
+        value: normalized,
+        type: AllowlistEntryType.EMAIL,
+        note,
+      },
+    });
+  }
+
+  /**
    * Normalizes a raw allowlist token into a typed entry.
    * "@acme.com" or "acme.com" -> DOMAIN "acme.com"
    * "user@acme.com" -> EMAIL "user@acme.com"

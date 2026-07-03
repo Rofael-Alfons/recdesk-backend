@@ -13,6 +13,7 @@ export interface CurrentUserData {
     mode: string;
     plan: string;
   };
+  permissions: string[];
 }
 
 export const CurrentUser = createParamDecorator(

@@ -2,7 +2,9 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
+import { UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PermissionsService } from '../../permissions/permissions.service';
 
 export interface JwtPayload {
   sub: string;
@@ -16,6 +18,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     private configService: ConfigService,
     private prisma: PrismaService,
+    private permissionsService: PermissionsService,
   ) {
     const secret = configService.get<string>('jwt.secret');
     if (!secret) {
@@ -54,6 +57,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         .catch(() => {}); // Silently ignore errors
     }
 
+    const permissions = await this.permissionsService.getUserPermissions(
+      user.companyId,
+      user.role as UserRole,
+    );
+
     return {
       id: user.id,
       email: user.email,
@@ -62,6 +70,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       role: user.role,
       companyId: user.companyId,
       company: user.company,
+      permissions,
     };
   }
 }

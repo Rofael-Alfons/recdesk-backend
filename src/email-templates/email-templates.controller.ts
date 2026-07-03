@@ -24,6 +24,7 @@ import {
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserData } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { UserRole } from '@prisma/client';
 
 @ApiTags('Email Templates')
@@ -33,7 +34,7 @@ export class EmailTemplatesController {
   constructor(private emailTemplatesService: EmailTemplatesService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('manageTemplates')
   @ApiOperation({ summary: 'Create a new email template' })
   @ApiResponse({
     status: 201,
@@ -75,7 +76,7 @@ export class EmailTemplatesController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('manageTemplates')
   @ApiOperation({ summary: 'Update email template by ID' })
   @ApiResponse({ status: 200, description: 'Email template updated' })
   @ApiResponse({ status: 404, description: 'Email template not found' })
@@ -100,7 +101,7 @@ export class EmailTemplatesController {
   }
 
   @Post('seed-defaults')
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('manageTemplates')
   @ApiOperation({ summary: 'Seed default email templates for your company' })
   @ApiResponse({ status: 201, description: 'Default templates seeded' })
   async seedDefaults(@CurrentUser() user: CurrentUserData) {

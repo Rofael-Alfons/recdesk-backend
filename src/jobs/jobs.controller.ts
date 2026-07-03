@@ -19,8 +19,7 @@ import { JobsService } from './jobs.service';
 import { CreateJobDto, UpdateJobDto, QueryJobsDto } from './dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserData } from '../common/decorators/current-user.decorator';
-import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
 
 @ApiTags('Jobs')
 @ApiBearerAuth()
@@ -29,7 +28,7 @@ export class JobsController {
   constructor(private jobsService: JobsService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('manageJobs')
   @ApiOperation({ summary: 'Create a new job posting' })
   @ApiResponse({ status: 201, description: 'Job created successfully' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
@@ -69,7 +68,7 @@ export class JobsController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('manageJobs')
   @ApiOperation({ summary: 'Update job by ID' })
   @ApiResponse({ status: 200, description: 'Job updated successfully' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
@@ -83,7 +82,7 @@ export class JobsController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('manageJobs')
   @ApiOperation({ summary: 'Close job by ID' })
   @ApiResponse({ status: 200, description: 'Job closed successfully' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })

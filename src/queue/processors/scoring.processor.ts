@@ -68,6 +68,7 @@ export class ScoringProcessor {
 
       const requirements = {
         title: targetJob.title,
+        description: targetJob.description ?? undefined,
         requiredSkills: targetJob.requiredSkills,
         preferredSkills: targetJob.preferredSkills,
         experienceLevel: targetJob.experienceLevel,

@@ -28,6 +28,8 @@ import { StorageModule } from './storage/storage.module';
 import { CommonModule } from './common/common.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { PermissionsGuard } from './common/guards/permissions.guard';
+import { PermissionsModule } from './permissions/permissions.module';
 import configuration from './config/configuration';
 
 @Module({
@@ -97,6 +99,7 @@ import configuration from './config/configuration';
     EmailSendingModule,
     NotificationsModule,
     WaitlistModule,
+    PermissionsModule,
     // QueueModule with graceful degradation - provides NoOpQueueService when Redis unavailable
     QueueModule.forRoot(),
   ],
@@ -118,6 +121,10 @@ import configuration from './config/configuration';
     {
       provide: APP_GUARD,
       useClass: RolesGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PermissionsGuard,
     },
   ],
 })
