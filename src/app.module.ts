@@ -30,6 +30,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { PermissionsModule } from './permissions/permissions.module';
+import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 import configuration from './config/configuration';
 
 @Module({
@@ -100,6 +101,7 @@ import configuration from './config/configuration';
     NotificationsModule,
     WaitlistModule,
     PermissionsModule,
+    PlatformAdminModule,
     // QueueModule with graceful degradation - provides NoOpQueueService when Redis unavailable
     QueueModule.forRoot(),
   ],

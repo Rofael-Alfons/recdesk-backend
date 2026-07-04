@@ -100,10 +100,9 @@ async function bootstrap() {
   );
 
   // CORS - support multiple origins for staging/production
-  const frontendUrl = configService.get<string>('frontend.url');
-  const allowedOrigins = frontendUrl
-    ? frontendUrl.split(',').map((url) => url.trim())
-    : ['http://localhost:3001'];
+  const allowedOrigins = configService.get<string[]>('frontend.origins') || [
+    'http://localhost:3001',
+  ];
 
   app.enableCors({
     origin: allowedOrigins,

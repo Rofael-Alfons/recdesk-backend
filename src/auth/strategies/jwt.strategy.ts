@@ -41,6 +41,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User not found or inactive');
     }
 
+    // Platform-admin suspension: block all tenant access for suspended companies.
+    if (user.company.status === 'SUSPENDED') {
+      throw new UnauthorizedException('Company account is suspended');
+    }
+
     // Track company activity for smart email polling
     // Rate-limited: only update if >1 minute since last update to avoid DB spam
     const now = new Date();
