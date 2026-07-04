@@ -81,6 +81,47 @@ export class AllowlistService implements OnModuleInit {
   }
 
   /**
+   * List all allowlist entries (most recent first). Used by the platform admin
+   * console.
+   */
+  async list() {
+    return this.prisma.allowedEmail.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Add a raw allowlist token (email or domain) as a typed entry. Idempotent.
+   * Returns the created/existing entry.
+   */
+  async add(rawValue: string, note?: string) {
+    const entry = AllowlistService.normalizeEntry(rawValue);
+    if (!entry) {
+      return null;
+    }
+
+    return this.prisma.allowedEmail.upsert({
+      where: { value: entry.value },
+      update: {},
+      create: {
+        value: entry.value,
+        type: entry.type,
+        note: note ?? 'Added via platform admin',
+      },
+    });
+  }
+
+  /**
+   * Remove an allowlist entry by id. Returns true if a row was deleted.
+   */
+  async removeById(id: string): Promise<boolean> {
+    const result = await this.prisma.allowedEmail.deleteMany({
+      where: { id },
+    });
+    return result.count > 0;
+  }
+
+  /**
    * Normalizes a raw allowlist token into a typed entry.
    * "@acme.com" or "acme.com" -> DOMAIN "acme.com"
    * "user@acme.com" -> EMAIL "user@acme.com"

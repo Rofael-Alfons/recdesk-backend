@@ -148,6 +148,12 @@ export class AuthService {
       throw new UnauthorizedException('Account is deactivated');
     }
 
+    if (user.company.status === 'SUSPENDED') {
+      throw new ForbiddenException(
+        'This company account has been suspended. Please contact support.',
+      );
+    }
+
     // Check if user has a password (OAuth-only users don't)
     if (!user.passwordHash) {
       throw new UnauthorizedException(
@@ -211,6 +217,15 @@ export class AuthService {
 
     if (!refreshToken.user.isActive) {
       throw new UnauthorizedException('Account is deactivated');
+    }
+
+    if (refreshToken.user.company.status === 'SUSPENDED') {
+      await this.prisma.refreshToken.deleteMany({
+        where: { userId: refreshToken.user.id },
+      });
+      throw new ForbiddenException(
+        'This company account has been suspended. Please contact support.',
+      );
     }
 
     // Re-check the allowlist on refresh so access is revoked within the

@@ -20,6 +20,7 @@ model Company {
   domain           String?  @unique
   mode             CompanyMode @default(FULL_ATS)
   plan             PlanType @default(STARTER)
+  status           CompanyStatus @default(ACTIVE)  // Platform-admin controlled suspension
   stripeCustomerId String?  @unique  // Stripe customer ID
   lastActivityAt   DateTime?  // Track last user activity for smart email polling
   createdAt        DateTime @default(now())
@@ -42,6 +43,13 @@ model Company {
 enum CompanyMode {
   FULL_ATS
   PRE_ATS
+}
+
+// Platform-admin controlled account state. Defaults to ACTIVE so existing
+// tenants are unaffected. SUSPENDED blocks tenant login/token validation.
+enum CompanyStatus {
+  ACTIVE
+  SUSPENDED
 }
 
 enum PlanType {
@@ -722,4 +730,58 @@ model AllowedEmail {
 enum AllowlistEntryType {
   EMAIL
   DOMAIN
+}
+
+// ============================================
+// PLATFORM ADMIN (SUPER ADMIN)
+// ============================================
+
+// Platform operators for the RecDesk super-admin console. Fully isolated from
+// tenant `users`: separate table, separate password hashes, and authenticated
+// with a separate JWT secret (PLATFORM_JWT_SECRET). Never tied to a company.
+model PlatformAdmin {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  refreshTokens PlatformRefreshToken[]
+
+  @@map("platform_admins")
+}
+
+model PlatformRefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  adminId String
+  admin   PlatformAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([expiresAt])
+  @@map("platform_refresh_tokens")
+}
+
+// Hardware/device binding for the super-admin console. Every request to
+// /api/admin/* must carry a device token whose SHA-256 hash matches an ACTIVE
+// row here. This restricts the console to explicitly enrolled devices (e.g. a
+// specific MacBook + iPhone). Tokens are high-entropy random secrets; only
+// their hash is stored, and the plaintext is shown once at registration.
+model PlatformDevice {
+  id        String   @id @default(uuid())
+  name      String
+  tokenHash String   @unique
+  isActive  Boolean  @default(true)
+  lastSeenAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("platform_devices")
 }
