@@ -26,6 +26,7 @@ import {
   BulkUpdateStatusDto,
   BulkAddTagsDto,
   BulkAssignJobDto,
+  BulkDeleteDto,
   RescoreCandidateDto,
 } from './dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -108,6 +109,17 @@ export class CandidatesController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.candidatesService.bulkAssignJob(dto, user.companyId, user.id);
+  }
+
+  @Post('bulk/delete')
+  @RequirePermissions('manageCandidates')
+  @ApiOperation({ summary: 'Bulk delete candidates' })
+  @ApiResponse({ status: 200, description: 'Candidates deleted' })
+  async bulkDelete(
+    @Body() dto: BulkDeleteDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.candidatesService.bulkDelete(dto, user.companyId);
   }
 
   @Get(':id')

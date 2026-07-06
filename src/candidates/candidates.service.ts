@@ -14,6 +14,7 @@ import {
   BulkUpdateStatusDto,
   BulkAddTagsDto,
   BulkAssignJobDto,
+  BulkDeleteDto,
   RescoreCandidateDto,
 } from './dto';
 import { Prisma } from '@prisma/client';
@@ -365,6 +366,29 @@ export class CandidatesService {
     return {
       message: `Assigned ${candidates.length} candidates to job: ${job.title}`,
       updatedCount: candidates.length,
+    };
+  }
+
+  async bulkDelete(dto: BulkDeleteDto, companyId: string) {
+    const candidates = await this.prisma.candidate.findMany({
+      where: {
+        id: { in: dto.candidateIds },
+        companyId,
+      },
+      select: { id: true },
+    });
+
+    if (candidates.length !== dto.candidateIds.length) {
+      throw new BadRequestException('Some candidates were not found');
+    }
+
+    await this.prisma.candidate.deleteMany({
+      where: { id: { in: dto.candidateIds }, companyId },
+    });
+
+    return {
+      message: `Deleted ${candidates.length} candidates`,
+      deletedCount: candidates.length,
     };
   }
 

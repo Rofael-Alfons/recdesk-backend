@@ -46,3 +46,11 @@ export class BulkAssignJobDto {
   @IsUUID()
   jobId: string;
 }
+
+export class BulkDeleteDto {
+  @ApiProperty({ description: 'Array of candidate IDs' })
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @ArrayMinSize(1)
+  candidateIds: string[];
+}

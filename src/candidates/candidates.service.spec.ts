@@ -35,6 +35,7 @@ describe('CandidatesService', () => {
         aggregate: jest.fn(),
         groupBy: jest.fn(),
         updateMany: jest.fn(),
+        deleteMany: jest.fn(),
       },
       job: { findFirst: jest.fn() },
       candidateNote: { create: jest.fn() },
@@ -193,6 +194,31 @@ describe('CandidatesService', () => {
       expect(result.updatedCount).toBe(2);
       expect(prisma.candidate.updateMany).toHaveBeenCalled();
       expect(prisma.candidateAction.createMany).toHaveBeenCalled();
+    });
+  });
+
+  describe('bulkDelete', () => {
+    it('rejects when some candidates are missing', async () => {
+      prisma.candidate.findMany.mockResolvedValue([{ id: 'c1' }]);
+
+      await expect(
+        service.bulkDelete({ candidateIds: ['c1', 'c2'] }, companyId),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.candidate.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('deletes all matching candidates', async () => {
+      prisma.candidate.findMany.mockResolvedValue([{ id: 'c1' }, { id: 'c2' }]);
+
+      const result = await service.bulkDelete(
+        { candidateIds: ['c1', 'c2'] },
+        companyId,
+      );
+
+      expect(result.deletedCount).toBe(2);
+      expect(prisma.candidate.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ['c1', 'c2'] }, companyId },
+      });
     });
   });
 
