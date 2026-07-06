@@ -15,6 +15,15 @@ import { BillingService } from '../billing/billing.service';
 import { SendEmailDto, BulkSendEmailDto, PreviewEmailDto } from './dto';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 
+export interface CalendarAttachment {
+  /** Raw .ics file content */
+  content: string;
+  /** iCalendar METHOD, mirrored on the inline calendar part */
+  method: 'REQUEST' | 'CANCEL';
+  /** Attachment filename */
+  filename?: string;
+}
+
 export interface SendResult {
   candidateId: string;
   candidateName: string;
@@ -407,6 +416,155 @@ export class EmailSendingService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * Send a custom HTML/text email (not tied to a candidate template).
+   * Used by interview scheduling for booking invites.
+   */
+  async sendCustom(
+    to: string,
+    subject: string,
+    html: string,
+    text: string,
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!this.isConfigured || !this.sesClient) {
+      this.logger.log(`[DEV MODE] Custom email would be sent to: ${to}`);
+      this.logger.log(`[DEV MODE] Subject: ${subject}`);
+      return { success: true };
+    }
+
+    try {
+      await this.sesClient.send(
+        new SendEmailCommand({
+          FromEmailAddress: `RecDesk <${this.fromEmail}>`,
+          Destination: { ToAddresses: [to] },
+          Content: {
+            Simple: {
+              Subject: { Data: subject, Charset: 'UTF-8' },
+              Body: {
+                Text: { Data: text, Charset: 'UTF-8' },
+                Html: { Data: html, Charset: 'UTF-8' },
+              },
+            },
+          },
+        }),
+      );
+      this.logger.log(`Custom email sent successfully to: ${to}`);
+      return { success: true };
+    } catch (error: any) {
+      this.logger.error(`Failed to send custom email to ${to}: ${error.message}`);
+      return { success: false, error: error.message || 'Failed to send email' };
+    }
+  }
+
+  /**
+   * Send an email with an .ics calendar invite attached. Uses a raw MIME
+   * message (Content.Raw) because SESv2 Simple content cannot carry
+   * attachments. The invite is included both as an inline text/calendar part
+   * (so Gmail/Outlook render "Add to calendar") and as an attachment fallback.
+   */
+  async sendWithCalendar(
+    to: string,
+    subject: string,
+    html: string,
+    text: string,
+    calendar: CalendarAttachment,
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!this.isConfigured || !this.sesClient) {
+      this.logger.log(`[DEV MODE] Calendar email would be sent to: ${to}`);
+      this.logger.log(`[DEV MODE] Subject: ${subject}`);
+      return { success: true };
+    }
+
+    try {
+      const raw = this.buildCalendarMime(to, subject, html, text, calendar);
+      await this.sesClient.send(
+        new SendEmailCommand({
+          FromEmailAddress: `RecDesk <${this.fromEmail}>`,
+          Destination: { ToAddresses: [to] },
+          Content: { Raw: { Data: Buffer.from(raw, 'utf-8') } },
+        }),
+      );
+      this.logger.log(`Calendar email sent successfully to: ${to}`);
+      return { success: true };
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to send calendar email to ${to}: ${error.message}`,
+      );
+      return { success: false, error: error.message || 'Failed to send email' };
+    }
+  }
+
+  /** Encode a header value as RFC 2047 base64 if it contains non-ASCII. */
+  private encodeHeader(value: string): string {
+    // Strip CR/LF and other control chars to prevent header injection —
+    // these have no legitimate purpose in a header value.
+    // eslint-disable-next-line no-control-regex
+    const sanitized = value.replace(/[\r\n\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+    // eslint-disable-next-line no-control-regex
+    if (/^[\x00-\x7F]*$/.test(sanitized)) return sanitized;
+    return `=?UTF-8?B?${Buffer.from(sanitized, 'utf-8').toString('base64')}?=`;
+  }
+
+  /** Base64-encode content wrapped at 76 columns for MIME bodies. */
+  private base64Wrapped(value: string): string {
+    const b64 = Buffer.from(value, 'utf-8').toString('base64');
+    return b64.replace(/(.{76})/g, '$1\r\n');
+  }
+
+  private buildCalendarMime(
+    to: string,
+    subject: string,
+    html: string,
+    text: string,
+    calendar: CalendarAttachment,
+  ): string {
+    const rand = Math.random().toString(36).slice(2);
+    const mixed = `mixed_${rand}`;
+    const alt = `alt_${rand}`;
+    const filename = calendar.filename || 'invite.ics';
+
+    return [
+      `From: RecDesk <${this.fromEmail}>`,
+      `To: ${this.encodeHeader(to)}`,
+      `Subject: ${this.encodeHeader(subject)}`,
+      'MIME-Version: 1.0',
+      `Content-Type: multipart/mixed; boundary="${mixed}"`,
+      '',
+      `--${mixed}`,
+      `Content-Type: multipart/alternative; boundary="${alt}"`,
+      '',
+      `--${alt}`,
+      'Content-Type: text/plain; charset=UTF-8',
+      'Content-Transfer-Encoding: base64',
+      '',
+      this.base64Wrapped(text),
+      '',
+      `--${alt}`,
+      'Content-Type: text/html; charset=UTF-8',
+      'Content-Transfer-Encoding: base64',
+      '',
+      this.base64Wrapped(html),
+      '',
+      `--${alt}`,
+      `Content-Type: text/calendar; charset=UTF-8; method=${calendar.method}`,
+      'Content-Transfer-Encoding: base64',
+      '',
+      this.base64Wrapped(calendar.content),
+      '',
+      `--${alt}--`,
+      '',
+      `--${mixed}`,
+      `Content-Type: application/ics; name="${filename}"`,
+      `Content-Disposition: attachment; filename="${filename}"`,
+      'Content-Transfer-Encoding: base64',
+      '',
+      this.base64Wrapped(calendar.content),
+      '',
+      `--${mixed}--`,
+      '',
+    ].join('\r\n');
   }
 
   /**
