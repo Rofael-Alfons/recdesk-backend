@@ -11,6 +11,8 @@ import { CompaniesModule } from './companies/companies.module';
 import { UsersModule } from './users/users.module';
 import { JobsModule } from './jobs/jobs.module';
 import { CandidatesModule } from './candidates/candidates.module';
+import { InterviewsModule } from './interviews/interviews.module';
+import { AvailabilityModule } from './availability/availability.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { AiModule } from './ai/ai.module';
 import { FileProcessingModule } from './file-processing/file-processing.module';
@@ -90,6 +92,8 @@ import configuration from './config/configuration';
     UsersModule,
     JobsModule,
     CandidatesModule,
+    InterviewsModule,
+    AvailabilityModule,
     IntegrationsModule,
     AiModule,
     FileProcessingModule,

@@ -15,16 +15,16 @@ datasource db {
 // ============================================
 
 model Company {
-  id               String   @id @default(uuid())
+  id               String        @id @default(uuid())
   name             String
-  domain           String?  @unique
-  mode             CompanyMode @default(FULL_ATS)
-  plan             PlanType @default(STARTER)
-  status           CompanyStatus @default(ACTIVE)  // Platform-admin controlled suspension
-  stripeCustomerId String?  @unique  // Stripe customer ID
-  lastActivityAt   DateTime?  // Track last user activity for smart email polling
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  domain           String?       @unique
+  mode             CompanyMode   @default(FULL_ATS)
+  plan             PlanType      @default(STARTER)
+  status           CompanyStatus @default(ACTIVE) // Platform-admin controlled suspension
+  stripeCustomerId String?       @unique // Stripe customer ID
+  lastActivityAt   DateTime? // Track last user activity for smart email polling
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   users            User[]
   jobs             Job[]
@@ -36,6 +36,7 @@ model Company {
   notifications    Notification[]
   invitations      Invitation[]
   rolePermissions  RolePermission[]
+  interviews       Interview[]
 
   @@map("companies")
 }
@@ -62,7 +63,7 @@ enum PlanType {
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
-  passwordHash String?  // Optional for OAuth users
+  passwordHash String? // Optional for OAuth users
   firstName    String
   lastName     String
   role         UserRole @default(RECRUITER)
@@ -71,20 +72,23 @@ model User {
   updatedAt    DateTime @updatedAt
 
   // OAuth provider IDs
-  googleId    String?  @unique
-  microsoftId String?  @unique
-  avatarUrl   String?  // Profile picture from OAuth
+  googleId    String? @unique
+  microsoftId String? @unique
+  avatarUrl   String? // Profile picture from OAuth
 
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  candidateNotes       CandidateNote[]
-  candidateActions     CandidateAction[]
-  emailsSent           EmailSent[]
-  refreshTokens        RefreshToken[]
-  passwordResetTokens  PasswordResetToken[]
-  notifications        Notification[]
-  sentInvitations      Invitation[]         @relation("InvitationInviter")
+  candidateNotes      CandidateNote[]
+  candidateActions    CandidateAction[]
+  emailsSent          EmailSent[]
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  notifications       Notification[]
+  sentInvitations     Invitation[]         @relation("InvitationInviter")
+  createdInterviews   Interview[]          @relation("InterviewCreatedBy")
+  assignedInterviews  Interview[]          @relation("InterviewInterviewer")
+  availabilitySchedule AvailabilitySchedule?
 
   @@index([companyId])
   @@index([googleId])
@@ -100,17 +104,17 @@ enum UserRole {
 }
 
 model Invitation {
-  id          String           @id @default(uuid())
-  email       String
-  firstName   String
-  lastName    String
-  role        UserRole         @default(RECRUITER)
-  token       String           @unique
-  status      InvitationStatus @default(PENDING)
-  expiresAt   DateTime
-  acceptedAt  DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id         String           @id @default(uuid())
+  email      String
+  firstName  String
+  lastName   String
+  role       UserRole         @default(RECRUITER)
+  token      String           @unique
+  status     InvitationStatus @default(PENDING)
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
 
   companyId   String
   company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -136,7 +140,7 @@ model RolePermission {
   permission String
   createdAt  DateTime @default(now())
 
-  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, role, permission])
   @@index([companyId])
@@ -183,10 +187,10 @@ model Job {
   status      JobStatus @default(ACTIVE)
 
   // Requirements stored as JSONB
-  requirements     Json?  // { skills: [], experienceLevel, qualifications, etc. }
-  requiredSkills   String[]
-  preferredSkills  String[]
-  experienceLevel  ExperienceLevel @default(JUNIOR)
+  requirements    Json? // { skills: [], experienceLevel, qualifications, etc. }
+  requiredSkills  String[]
+  preferredSkills String[]
+  experienceLevel ExperienceLevel @default(JUNIOR)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -197,6 +201,7 @@ model Job {
   candidates      Candidate[]
   candidateScores CandidateScore[]
   pipelineStages  PipelineStage[]
+  interviews      Interview[]
 
   @@index([companyId, status])
   @@index([companyId, createdAt])
@@ -218,10 +223,10 @@ enum ExperienceLevel {
 }
 
 model PipelineStage {
-  id         String @id @default(uuid())
+  id         String  @id @default(uuid())
   name       String
   orderIndex Int
-  color      String @default("#3B82F6")
+  color      String  @default("#3B82F6")
   isDefault  Boolean @default(false)
 
   jobId String
@@ -254,8 +259,8 @@ model Candidate {
   // CV Files
   cvFileUrl            String
   cvFileName           String?
-  cvText               String?  // Extracted text from CV
-  extractionConfidence Int?     // 0-100
+  cvText               String? // Extracted text from CV
+  extractionConfidence Int? // 0-100
 
   // Parsed Data (JSONB)
   education      Json?
@@ -266,9 +271,9 @@ model Candidate {
   languages      Json?
 
   // Scoring
-  overallScore   Int?     // 0-100
-  scoreBreakdown Json?    // Detailed component scores
-  aiSummary      String?  // AI-generated candidate summary
+  overallScore   Int? // 0-100
+  scoreBreakdown Json? // Detailed component scores
+  aiSummary      String? // AI-generated candidate summary
 
   // Tags
   tags String[]
@@ -280,16 +285,17 @@ model Candidate {
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   jobId String?
-  job   Job?   @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  job   Job?    @relation(fields: [jobId], references: [id], onDelete: SetNull)
 
-  emailImportId String?       @unique
-  emailImport   EmailImport?  @relation(fields: [emailImportId], references: [id])
+  emailImportId String?      @unique
+  emailImport   EmailImport? @relation(fields: [emailImportId], references: [id])
 
-  scores         CandidateScore[]
-  stageHistory   CandidateStage[]
-  notes          CandidateNote[]
-  actions        CandidateAction[]
-  emailsSent     EmailSent[]
+  scores       CandidateScore[]
+  stageHistory CandidateStage[]
+  notes        CandidateNote[]
+  actions      CandidateAction[]
+  emailsSent   EmailSent[]
+  interviews   Interview[]
 
   @@index([companyId, overallScore])
   @@index([companyId, createdAt])
@@ -324,19 +330,19 @@ model CandidateScore {
   id String @id @default(uuid())
 
   // Scores (0-100)
-  overallScore      Int
-  skillsMatchScore  Int?
-  experienceScore   Int?
-  educationScore    Int?
-  growthScore       Int?
-  bonusScore        Int?
+  overallScore     Int
+  skillsMatchScore Int?
+  experienceScore  Int?
+  educationScore   Int?
+  growthScore      Int?
+  bonusScore       Int?
 
   // Explanations
   scoreExplanation Json?
   recommendation   String?
 
   // Metadata
-  algorithmVersion String @default("v1.0")
+  algorithmVersion String   @default("v1.0")
   scoredAt         DateTime @default(now())
 
   candidateId String
@@ -383,7 +389,7 @@ model CandidateNote {
 
 model CandidateAction {
   id        String   @id @default(uuid())
-  action    String   // e.g., "moved_to_stage", "shortlisted", "rejected", "email_sent"
+  action    String // e.g., "moved_to_stage", "shortlisted", "rejected", "email_sent"
   details   Json?
   createdAt DateTime @default(now())
 
@@ -399,25 +405,174 @@ model CandidateAction {
 }
 
 // ============================================
+// INTERVIEW SCHEDULING
+// ============================================
+
+model Interview {
+  id String @id @default(uuid())
+
+  // Coordination state
+  status     InterviewStatus @default(DRAFT)
+  slotSource SlotSource      @default(MANAGER)
+  // FIXED: pre-materialized InterviewSlot rows (recruiter/manager pre-picked times).
+  // LIVE: no pre-picked slots — candidate books straight off interviewerUserId's
+  // live weekly schedule, computed on demand.
+  offerMode  OfferMode       @default(FIXED)
+
+  // Interview details
+  durationMinutes     Int                   @default(45)
+  timezone            String                @default("Africa/Cairo") // IANA tz for slot wall-times
+  locationType        InterviewLocationType @default(ONLINE)
+  locationDetails     String? // meeting URL, phone number, or address
+  message             String? // optional note shown to the candidate
+  additionalAttendees String[] // extra attendee emails (cc'd on the invite)
+
+  // Public candidate booking token (unguessable)
+  bookingToken String @unique
+
+  // Manager coordination tracking
+  managerRespondedAt DateTime?
+  lastNudgedAt       DateTime?
+
+  // Booking result
+  scheduledSlotId String?   @unique
+  scheduledAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  jobId String?
+  job   Job?    @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  createdById String
+  createdBy   User   @relation("InterviewCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+
+  // The internal hiring manager (team member) asked to provide availability.
+  interviewerUserId String?
+  interviewer       User?   @relation("InterviewInterviewer", fields: [interviewerUserId], references: [id], onDelete: SetNull)
+
+  slots InterviewSlot[]
+
+  @@index([companyId, status])
+  @@index([candidateId])
+  @@index([interviewerUserId, status])
+  @@map("interviews")
+}
+
+model InterviewSlot {
+  id       String   @id @default(uuid())
+  startsAt DateTime // UTC
+  endsAt   DateTime // UTC
+
+  interviewId String
+  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+
+  @@index([interviewId])
+  @@map("interview_slots")
+}
+
+enum InterviewStatus {
+  DRAFT
+  AWAITING_MANAGER
+  AWAITING_CANDIDATE
+  SCHEDULED
+  CANCELLED
+  EXPIRED
+}
+
+enum SlotSource {
+  MANAGER
+  RECRUITER
+}
+
+enum OfferMode {
+  FIXED
+  LIVE
+}
+
+enum InterviewLocationType {
+  ONLINE
+  PHONE
+  ONSITE
+}
+
+// ============================================
+// RECURRING AVAILABILITY (Calendly-style weekly hours)
+// ============================================
+
+model AvailabilitySchedule {
+  id        String   @id @default(uuid())
+  timezone  String   @default("Africa/Cairo") // IANA tz; applies to all rules/overrides below
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  rules     AvailabilityRule[]
+  overrides AvailabilityOverride[]
+
+  @@map("availability_schedules")
+}
+
+// One row per available time-range on a given day-of-week. A day with zero
+// rows is "unavailable". Multiple rows per dayOfWeek allow split shifts.
+model AvailabilityRule {
+  id        String @id @default(uuid())
+  dayOfWeek Int // 0=Sunday .. 6=Saturday (MENA Sun-Thu work week)
+  startTime String // "HH:mm", 24h wall-clock, interpreted in schedule.timezone
+  endTime   String // "HH:mm"
+
+  scheduleId String
+  schedule   AvailabilitySchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@index([scheduleId, dayOfWeek])
+  @@map("availability_rules")
+}
+
+// Date-specific override: marks a specific date fully unavailable, or gives
+// it custom hours that replace the weekly rule for that date only.
+model AvailabilityOverride {
+  id          String   @id @default(uuid())
+  date        DateTime @db.Date // calendar date only, no time component
+  isAvailable Boolean  @default(false)
+  startTime   String? // "HH:mm", required when isAvailable = true
+  endTime     String? // "HH:mm", required when isAvailable = true
+
+  scheduleId String
+  schedule   AvailabilitySchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleId, date])
+  @@index([scheduleId])
+  @@map("availability_overrides")
+}
+
+// ============================================
 // EMAIL INTEGRATION
 // ============================================
 
 model EmailConnection {
-  id            String              @id @default(uuid())
-  provider      EmailProvider
-  email         String
-  accessToken   String              // Encrypted
-  refreshToken  String?             // Encrypted
-  expiresAt     DateTime?
-  isActive      Boolean             @default(true)
-  autoImport    Boolean             @default(true)  // Auto-import job application emails
+  id                  String        @id @default(uuid())
+  provider            EmailProvider
+  email               String
+  accessToken         String // Encrypted
+  refreshToken        String? // Encrypted
+  expiresAt           DateTime?
+  isActive            Boolean       @default(true)
+  autoImport          Boolean       @default(true) // Auto-import job application emails
   lastSyncAt          DateTime?
-  lastHistoryId       String?          // Gmail history ID / Outlook delta link token
-  watchExpiration     DateTime?        // Gmail Pub/Sub watch expiry / Graph subscription expiry
-  watchHistoryId      String?          // historyId returned by Gmail watch() call
-  graphSubscriptionId String?          // Microsoft Graph change notification subscription ID
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  lastHistoryId       String? // Gmail history ID / Outlook delta link token
+  watchExpiration     DateTime? // Gmail Pub/Sub watch expiry / Graph subscription expiry
+  watchHistoryId      String? // historyId returned by Gmail watch() call
+  graphSubscriptionId String? // Microsoft Graph change notification subscription ID
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -434,27 +589,27 @@ enum EmailProvider {
 }
 
 model EmailImport {
-  id              String            @id @default(uuid())
-  messageId       String            @unique  // Email message ID from provider
-  subject         String?
-  senderEmail     String
-  senderName      String?
-  receivedAt      DateTime
+  id          String   @id @default(uuid())
+  messageId   String   @unique // Email message ID from provider
+  subject     String?
+  senderEmail String
+  senderName  String?
+  receivedAt  DateTime
 
   // Classification
-  isJobApplication  Boolean @default(false)
-  confidence        Int?    // 0-100
-  detectedPosition  String?
+  isJobApplication Boolean @default(false)
+  confidence       Int? // 0-100
+  detectedPosition String?
 
   // Email content
-  bodyText      String?
-  bodyHtml      String?
+  bodyText String?
+  bodyHtml String?
 
   // Processing status
-  status        EmailImportStatus @default(PENDING)
-  processedAt   DateTime?
-  errorMessage  String?
-  skipReason    String?   // Reason for skipping (prefilter or AI classification)
+  status       EmailImportStatus @default(PENDING)
+  processedAt  DateTime?
+  errorMessage String?
+  skipReason   String? // Reason for skipping (prefilter or AI classification)
 
   createdAt DateTime @default(now())
 
@@ -463,7 +618,7 @@ model EmailImport {
 
   candidate Candidate?
 
-  @@index([status, createdAt])  // For efficient cleanup queries
+  @@index([status, createdAt]) // For efficient cleanup queries
   @@index([emailConnectionId, status])
   @@index([emailConnectionId])
   @@map("email_imports")
@@ -508,10 +663,10 @@ enum EmailTemplateType {
 }
 
 model EmailSent {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   subject   String
   body      String
-  sentAt    DateTime @default(now())
+  sentAt    DateTime  @default(now())
   openedAt  DateTime?
   clickedAt DateTime?
 
@@ -532,16 +687,16 @@ model EmailSent {
 
 model SubscriptionPlan {
   id               String   @id @default(uuid())
-  name             String   // "Free Trial", "Starter", "Professional", "Enterprise"
-  stripePriceId    String?  @unique  // Stripe price ID (null for free trial)
-  monthlyPrice     Int      // Price in cents (0 for free trial)
-  annualPrice      Int?     // Annual price in cents (with discount)
-  cvLimit          Int      // CVs per month (-1 for unlimited)
-  userLimit        Int      // Team members (-1 for unlimited)
-  aiCallLimit      Int      @default(-1)  // AI calls per month (-1 for unlimited)
-  emailSentLimit   Int      @default(-1)  // Emails sent per month (-1 for unlimited)
-  emailImportLimit Int      @default(-1)  // Emails imported per month (-1 for unlimited)
-  features         Json     // Feature flags { emailIntegration: true, ... }
+  name             String // "Free Trial", "Starter", "Professional", "Enterprise"
+  stripePriceId    String?  @unique // Stripe price ID (null for free trial)
+  monthlyPrice     Int // Price in cents (0 for free trial)
+  annualPrice      Int? // Annual price in cents (with discount)
+  cvLimit          Int // CVs per month (-1 for unlimited)
+  userLimit        Int // Team members (-1 for unlimited)
+  aiCallLimit      Int      @default(-1) // AI calls per month (-1 for unlimited)
+  emailSentLimit   Int      @default(-1) // Emails sent per month (-1 for unlimited)
+  emailImportLimit Int      @default(-1) // Emails imported per month (-1 for unlimited)
+  features         Json // Feature flags { emailIntegration: true, ... }
   isActive         Boolean  @default(true)
   sortOrder        Int      @default(0)
   createdAt        DateTime @default(now())
@@ -554,13 +709,13 @@ model SubscriptionPlan {
 
 model Subscription {
   id                   String             @id @default(uuid())
-  stripeSubscriptionId String?            @unique  // Null for free trial
+  stripeSubscriptionId String?            @unique // Null for free trial
   status               SubscriptionStatus @default(TRIALING)
   currentPeriodStart   DateTime
   currentPeriodEnd     DateTime
   cancelAtPeriodEnd    Boolean            @default(false)
-  trialEndsAt          DateTime?          // For free trial tracking
-  gracePeriodEndsAt    DateTime?          // Set when payment fails, null otherwise
+  trialEndsAt          DateTime? // For free trial tracking
+  gracePeriodEndsAt    DateTime? // Set when payment fails, null otherwise
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
@@ -581,7 +736,7 @@ enum SubscriptionStatus {
   UNPAID
   INCOMPLETE
   INCOMPLETE_EXPIRED
-  EXPIRED  // Subscription period has ended without renewal
+  EXPIRED // Subscription period has ended without renewal
 }
 
 model UsageRecord {
@@ -608,21 +763,21 @@ enum UsageType {
 }
 
 model Invoice {
-  id              String        @id @default(uuid())
-  stripeInvoiceId String        @unique
-  amountDue       Int           // In cents
-  amountPaid      Int           // In cents
-  currency        String        @default("usd")
-  status          InvoiceStatus
-  invoicePdf      String?       // URL to PDF
-  hostedInvoiceUrl String?      // Stripe hosted invoice URL
-  periodStart     DateTime
-  periodEnd       DateTime
-  paidAt          DateTime?
-  createdAt       DateTime      @default(now())
+  id               String        @id @default(uuid())
+  stripeInvoiceId  String        @unique
+  amountDue        Int // In cents
+  amountPaid       Int // In cents
+  currency         String        @default("usd")
+  status           InvoiceStatus
+  invoicePdf       String? // URL to PDF
+  hostedInvoiceUrl String? // Stripe hosted invoice URL
+  periodStart      DateTime
+  periodEnd        DateTime
+  paidAt           DateTime?
+  createdAt        DateTime      @default(now())
 
   companyId String
-  
+
   @@index([companyId])
   @@map("invoices")
 }
@@ -647,11 +802,14 @@ enum NotificationType {
   USAGE_WARNING_90
   USAGE_LIMIT_REACHED
   // Trial and subscription notifications
-  TRIAL_EXPIRING_SOON     // 3 days before trial ends
+  TRIAL_EXPIRING_SOON // 3 days before trial ends
   TRIAL_EXPIRING_TOMORROW // 1 day before trial ends
-  TRIAL_EXPIRED           // Trial has expired
-  SUBSCRIPTION_EXPIRED    // Subscription period has ended
-  PAYMENT_FAILED_WARNING  // Payment failed, grace period started
+  TRIAL_EXPIRED // Trial has expired
+  SUBSCRIPTION_EXPIRED // Subscription period has ended
+  PAYMENT_FAILED_WARNING // Payment failed, grace period started
+  // Interview scheduling
+  INTERVIEW_AVAILABILITY_REQUEST // Manager asked to submit availability
+  INTERVIEW_SCHEDULED // Candidate booked an interview slot
 }
 
 model Notification {
@@ -667,8 +825,8 @@ model Notification {
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  userId    String?
-  user      User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([companyId, isRead, createdAt])
   @@map("notifications")
@@ -740,15 +898,15 @@ enum AllowlistEntryType {
 // tenant `users`: separate table, separate password hashes, and authenticated
 // with a separate JWT secret (PLATFORM_JWT_SECRET). Never tied to a company.
 model PlatformAdmin {
-  id           String   @id @default(uuid())
-  email        String   @unique
+  id           String    @id @default(uuid())
+  email        String    @unique
   passwordHash String
   firstName    String
   lastName     String
-  isActive     Boolean  @default(true)
+  isActive     Boolean   @default(true)
   lastLoginAt  DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   refreshTokens PlatformRefreshToken[]
 
@@ -775,13 +933,13 @@ model PlatformRefreshToken {
 // specific MacBook + iPhone). Tokens are high-entropy random secrets; only
 // their hash is stored, and the plaintext is shown once at registration.
 model PlatformDevice {
-  id        String   @id @default(uuid())
-  name      String
-  tokenHash String   @unique
-  isActive  Boolean  @default(true)
+  id         String    @id @default(uuid())
+  name       String
+  tokenHash  String    @unique
+  isActive   Boolean   @default(true)
   lastSeenAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@map("platform_devices")
 }

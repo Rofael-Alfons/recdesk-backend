@@ -11,6 +11,12 @@ import {
 
 interface SSEEvent {
   companyId: string;
+  /**
+   * The user this notification is targeted at. When null/undefined the
+   * notification is company-wide (e.g. billing/usage alerts) and every user
+   * in the company should receive it.
+   */
+  userId?: string | null;
   notification: NotificationEvent;
 }
 
@@ -55,6 +61,7 @@ export class NotificationsService implements OnModuleDestroy {
     // Emit the notification via SSE
     this.notificationSubject.next({
       companyId: data.companyId,
+      userId: data.userId ?? null,
       notification: notificationEvent,
     });
 
@@ -66,11 +73,21 @@ export class NotificationsService implements OnModuleDestroy {
   }
 
   /**
-   * Subscribe to notifications for a specific company via SSE
+   * Subscribe to notifications for a specific user via SSE.
+   *
+   * A user receives notifications that are either targeted directly at them
+   * (matching userId) or that are company-wide (userId is null/undefined).
    */
-  subscribeToCompany(companyId: string): Observable<NotificationEvent> {
+  subscribeForUser(
+    companyId: string,
+    userId: string,
+  ): Observable<NotificationEvent> {
     return this.notificationSubject.pipe(
-      filter((event) => event.companyId === companyId),
+      filter(
+        (event) =>
+          event.companyId === companyId &&
+          (event.userId == null || event.userId === userId),
+      ),
       map((event) => event.notification),
     );
   }
@@ -80,13 +97,15 @@ export class NotificationsService implements OnModuleDestroy {
    */
   async getNotifications(
     companyId: string,
+    userId: string,
     options: NotificationQueryOptions = {},
   ): Promise<PaginatedNotifications> {
     const { page = 1, limit = 20, unreadOnly = false } = options;
     const skip = (page - 1) * limit;
 
-    const where = {
+    const where: Prisma.NotificationWhereInput = {
       companyId,
+      OR: [{ userId }, { userId: null }],
       ...(unreadOnly && { isRead: false }),
     };
 
@@ -119,11 +138,16 @@ export class NotificationsService implements OnModuleDestroy {
   /**
    * Mark a notification as read
    */
-  async markAsRead(notificationId: string, companyId: string): Promise<void> {
+  async markAsRead(
+    notificationId: string,
+    companyId: string,
+    userId: string,
+  ): Promise<void> {
     await this.prisma.notification.updateMany({
       where: {
         id: notificationId,
         companyId,
+        OR: [{ userId }, { userId: null }],
       },
       data: {
         isRead: true,
@@ -133,12 +157,13 @@ export class NotificationsService implements OnModuleDestroy {
   }
 
   /**
-   * Mark all notifications as read for a company
+   * Mark all notifications visible to a user as read
    */
-  async markAllAsRead(companyId: string): Promise<void> {
+  async markAllAsRead(companyId: string, userId: string): Promise<void> {
     await this.prisma.notification.updateMany({
       where: {
         companyId,
+        OR: [{ userId }, { userId: null }],
         isRead: false,
       },
       data: {
@@ -149,12 +174,13 @@ export class NotificationsService implements OnModuleDestroy {
   }
 
   /**
-   * Get unread notification count for a company
+   * Get unread notification count for a user
    */
-  async getUnreadCount(companyId: string): Promise<number> {
+  async getUnreadCount(companyId: string, userId: string): Promise<number> {
     return this.prisma.notification.count({
       where: {
         companyId,
+        OR: [{ userId }, { userId: null }],
         isRead: false,
       },
     });
