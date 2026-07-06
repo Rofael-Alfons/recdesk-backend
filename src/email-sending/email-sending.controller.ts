@@ -17,8 +17,7 @@ import { EmailSendingService } from './email-sending.service';
 import { SendEmailDto, BulkSendEmailDto, PreviewEmailDto } from './dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserData } from '../common/decorators/current-user.decorator';
-import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
 
 @ApiTags('Emails')
 @ApiBearerAuth()
@@ -27,7 +26,7 @@ export class EmailSendingController {
   constructor(private emailSendingService: EmailSendingService) {}
 
   @Post('send')
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('sendEmails')
   @ApiOperation({ summary: 'Send email to a single candidate' })
   @ApiResponse({ status: 201, description: 'Email sent successfully' })
   @ApiResponse({ status: 404, description: 'Candidate or template not found' })
@@ -40,7 +39,7 @@ export class EmailSendingController {
   }
 
   @Post('bulk-send')
-  @Roles(UserRole.ADMIN, UserRole.RECRUITER)
+  @RequirePermissions('sendEmails')
   @ApiOperation({ summary: 'Send bulk emails to multiple candidates' })
   @ApiResponse({ status: 201, description: 'Bulk emails sent' })
   @ApiResponse({ status: 404, description: 'Candidates or template not found' })

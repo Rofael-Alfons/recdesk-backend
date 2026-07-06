@@ -68,6 +68,24 @@ export default () => ({
     ), // 7 days
   },
 
+  // Platform super-admin authentication. Uses a SEPARATE secret from the tenant
+  // JWT so platform tokens and tenant tokens are never interchangeable.
+  platform: {
+    jwtSecret:
+      process.env.NODE_ENV === 'production'
+        ? process.env.PLATFORM_JWT_SECRET_PROD || process.env.PLATFORM_JWT_SECRET
+        : process.env.PLATFORM_JWT_SECRET ||
+          'platform-super-secret-key-change-in-production',
+    accessExpirationSeconds: parseInt(
+      process.env.PLATFORM_JWT_ACCESS_EXPIRATION_SECONDS || '900',
+      10,
+    ), // 15 minutes
+    refreshExpirationSeconds: parseInt(
+      process.env.PLATFORM_JWT_REFRESH_EXPIRATION_SECONDS || '604800',
+      10,
+    ), // 7 days
+  },
+
   bcrypt: {
     saltRounds: parseInt(process.env.BCRYPT_SALT_ROUNDS || '10', 10),
   },
@@ -119,17 +137,27 @@ export default () => ({
     model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile', // Fast and capable model
   },
 
-  sendgrid: {
-    apiKey:
+  // Email sending via AWS SES (reuses AWS credentials from the `aws` block).
+  // SES_REGION can override the default AWS region (SES is region-specific).
+  // fromEmail must be a verified SES identity.
+  ses: {
+    region:
       process.env.NODE_ENV === 'production'
-        ? process.env.SENDGRID_API_KEY_PROD || process.env.SENDGRID_API_KEY
-        : process.env.SENDGRID_API_KEY,
+        ? process.env.SES_REGION_PROD ||
+          process.env.SES_REGION ||
+          process.env.AWS_REGION ||
+          'eu-central-1'
+        : process.env.SES_REGION ||
+          process.env.AWS_REGION ||
+          'eu-central-1',
     fromEmail:
       process.env.NODE_ENV === 'production'
-        ? process.env.SENDGRID_FROM_EMAIL_PROD ||
-          process.env.SENDGRID_FROM_EMAIL ||
+        ? process.env.SES_FROM_EMAIL_PROD ||
+          process.env.SES_FROM_EMAIL ||
           'noreply@recdesk.io'
-        : process.env.SENDGRID_FROM_EMAIL || 'noreply@recdesk.io',
+        : process.env.SES_FROM_EMAIL || 'noreply@recdesk.io',
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
 
   // Google (for Gmail email integration)
@@ -228,9 +256,22 @@ export default () => ({
           'http://localhost:3000/api/auth/microsoft/callback',
   },
 
-  frontend: {
-    url: process.env.FRONTEND_URL || 'http://localhost:3001',
-  },
+  // FRONTEND_URL may be a comma-separated list of origins (used for CORS).
+  // `url` is the primary origin (first entry) and is the only value safe to use
+  // as a base for building redirect/link URLs. `origins` holds the full list
+  // for CORS. Never use the raw comma-separated string as a redirect base or it
+  // produces an invalid URL like "http://a,http://b/login".
+  frontend: (() => {
+    const raw = process.env.FRONTEND_URL || 'http://localhost:3001';
+    const origins = raw
+      .split(',')
+      .map((u) => u.trim())
+      .filter(Boolean);
+    return {
+      url: origins[0] || 'http://localhost:3001',
+      origins,
+    };
+  })(),
 
   encryption: {
     key: process.env.ENCRYPTION_KEY,
@@ -255,5 +296,16 @@ export default () => ({
   waitlist: {
     welcomeEmailEnabled:
       process.env.WAITLIST_WELCOME_EMAIL_ENABLED !== 'false', // Default: true
+  },
+
+  // Access allowlist gating for registration/login.
+  // Comma-separated list of allowed emails and/or domains used to seed the
+  // `allowed_emails` table on startup. Domains may be written as "@acme.com"
+  // or "acme.com"; individual emails as "user@acme.com".
+  auth: {
+    allowlist:
+      process.env.NODE_ENV === 'production'
+        ? process.env.AUTH_ALLOWLIST_PROD || process.env.AUTH_ALLOWLIST
+        : process.env.AUTH_ALLOWLIST,
   },
 });

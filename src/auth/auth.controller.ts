@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Get,
+  Query,
   UseGuards,
   Req,
   Res,
@@ -20,12 +21,17 @@ import {
   RefreshTokenDto,
   ForgotPasswordDto,
   ResetPasswordDto,
+  AcceptInvitationDto,
 } from './dto';
 import { Public } from '../common/decorators/public.decorator';
 import {
   ThrottleAuth,
   ThrottleRegistration,
 } from '../common/decorators/throttle-auth.decorator';
+import {
+  GoogleAuthGuard,
+  MicrosoftAuthGuard,
+} from './guards/oauth-auth.guard';
 
 // Extend Express Request to include user from OAuth strategies
 interface OAuthUser {
@@ -38,6 +44,13 @@ interface OAuthUser {
   isNewUser: boolean;
   needsCompanySetup: boolean;
 }
+
+// Request shape after an OAuth guard runs. `oauthErrorMessage` is populated by
+// the custom guards when access is denied (e.g. email not on the allowlist).
+type OAuthRequest = Request & {
+  user?: OAuthUser;
+  oauthErrorMessage?: string;
+};
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -113,6 +126,32 @@ export class AuthController {
   }
 
   // ============================================
+  // INVITATIONS
+  // ============================================
+
+  @Public()
+  @ThrottleAuth()
+  @Get('invitation')
+  @ApiOperation({ summary: 'Get a pending invitation by token' })
+  @ApiResponse({ status: 200, description: 'Invitation details retrieved' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired invitation' })
+  async getInvitation(@Query('token') token: string) {
+    return this.authService.getInvitation(token);
+  }
+
+  @Public()
+  @ThrottleAuth()
+  @Post('accept-invitation')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Accept an invitation and set a password' })
+  @ApiResponse({ status: 200, description: 'Invitation accepted, user logged in' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired invitation' })
+  @ApiResponse({ status: 409, description: 'Account already exists' })
+  async acceptInvitation(@Body() dto: AcceptInvitationDto) {
+    return this.authService.acceptInvitation(dto);
+  }
+
+  // ============================================
   // GOOGLE OAUTH
   // ============================================
 
@@ -127,10 +166,10 @@ export class AuthController {
 
   @Public()
   @Get('google/callback')
-  @UseGuards(AuthGuard('google'))
+  @UseGuards(GoogleAuthGuard)
   @ApiExcludeEndpoint()
   async googleAuthCallback(
-    @Req() req: Request & { user: OAuthUser },
+    @Req() req: OAuthRequest,
     @Res() res: Response,
   ) {
     return this.handleOAuthCallback(req, res, 'google');
@@ -151,10 +190,10 @@ export class AuthController {
 
   @Public()
   @Get('microsoft/callback')
-  @UseGuards(AuthGuard('microsoft'))
+  @UseGuards(MicrosoftAuthGuard)
   @ApiExcludeEndpoint()
   async microsoftAuthCallback(
-    @Req() req: Request & { user: OAuthUser },
+    @Req() req: OAuthRequest,
     @Res() res: Response,
   ) {
     return this.handleOAuthCallback(req, res, 'microsoft');
@@ -165,7 +204,7 @@ export class AuthController {
   // ============================================
 
   private async handleOAuthCallback(
-    req: Request & { user: OAuthUser },
+    req: OAuthRequest,
     res: Response,
     provider: 'google' | 'microsoft',
   ) {
@@ -174,8 +213,11 @@ export class AuthController {
 
       if (!user) {
         const frontendUrl = this.configService.get<string>('frontend.url');
+        // The custom OAuth guard stashes a human-readable reason (e.g. the
+        // email is not on the access allowlist) when access is denied.
+        const message = req.oauthErrorMessage || 'oauth_failed';
         return res.redirect(
-          `${frontendUrl}/login?error=oauth_failed&provider=${provider}`,
+          `${frontendUrl}/login?error=${encodeURIComponent(message)}&provider=${provider}`,
         );
       }
 

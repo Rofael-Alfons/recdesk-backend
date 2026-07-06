@@ -2,7 +2,9 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
+import { UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PermissionsService } from '../../permissions/permissions.service';
 
 export interface JwtPayload {
   sub: string;
@@ -16,6 +18,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     private configService: ConfigService,
     private prisma: PrismaService,
+    private permissionsService: PermissionsService,
   ) {
     const secret = configService.get<string>('jwt.secret');
     if (!secret) {
@@ -38,6 +41,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User not found or inactive');
     }
 
+    // Platform-admin suspension: block all tenant access for suspended companies.
+    if (user.company.status === 'SUSPENDED') {
+      throw new UnauthorizedException('Company account is suspended');
+    }
+
     // Track company activity for smart email polling
     // Rate-limited: only update if >1 minute since last update to avoid DB spam
     const now = new Date();
@@ -54,6 +62,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         .catch(() => {}); // Silently ignore errors
     }
 
+    const permissions = await this.permissionsService.getUserPermissions(
+      user.companyId,
+      user.role as UserRole,
+    );
+
     return {
       id: user.id,
       email: user.email,
@@ -62,6 +75,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       role: user.role,
       companyId: user.companyId,
       company: user.company,
+      permissions,
     };
   }
 }

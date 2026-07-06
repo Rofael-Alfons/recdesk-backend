@@ -11,6 +11,8 @@ import { CompaniesModule } from './companies/companies.module';
 import { UsersModule } from './users/users.module';
 import { JobsModule } from './jobs/jobs.module';
 import { CandidatesModule } from './candidates/candidates.module';
+import { InterviewsModule } from './interviews/interviews.module';
+import { AvailabilityModule } from './availability/availability.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { AiModule } from './ai/ai.module';
 import { FileProcessingModule } from './file-processing/file-processing.module';
@@ -28,6 +30,9 @@ import { StorageModule } from './storage/storage.module';
 import { CommonModule } from './common/common.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { PermissionsGuard } from './common/guards/permissions.guard';
+import { PermissionsModule } from './permissions/permissions.module';
+import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 import configuration from './config/configuration';
 
 @Module({
@@ -87,6 +92,8 @@ import configuration from './config/configuration';
     UsersModule,
     JobsModule,
     CandidatesModule,
+    InterviewsModule,
+    AvailabilityModule,
     IntegrationsModule,
     AiModule,
     FileProcessingModule,
@@ -97,6 +104,8 @@ import configuration from './config/configuration';
     EmailSendingModule,
     NotificationsModule,
     WaitlistModule,
+    PermissionsModule,
+    PlatformAdminModule,
     // QueueModule with graceful degradation - provides NoOpQueueService when Redis unavailable
     QueueModule.forRoot(),
   ],
@@ -118,6 +127,10 @@ import configuration from './config/configuration';
     {
       provide: APP_GUARD,
       useClass: RolesGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PermissionsGuard,
     },
   ],
 })

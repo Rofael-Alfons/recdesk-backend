@@ -1,13 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import sgMail from '@sendgrid/mail';
+import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 
 /**
  * TransactionalEmailService handles system-level emails:
  * - Password reset
  * - User invitation
  *
- * Falls back to console logging when SendGrid is not configured (dev mode).
+ * Falls back to console logging when AWS SES is not configured (dev mode).
  */
 @Injectable()
 export class TransactionalEmailService {
@@ -15,23 +15,30 @@ export class TransactionalEmailService {
   private readonly fromEmail: string;
   private readonly isConfigured: boolean;
   private readonly frontendUrl: string;
+  private readonly sesClient?: SESv2Client;
 
   constructor(private configService: ConfigService) {
-    const apiKey = this.configService.get<string>('sendgrid.apiKey');
+    const region = this.configService.get<string>('ses.region');
+    const accessKeyId = this.configService.get<string>('ses.accessKeyId');
+    const secretAccessKey = this.configService.get<string>(
+      'ses.secretAccessKey',
+    );
     this.fromEmail =
-      this.configService.get<string>('sendgrid.fromEmail') ||
-      'noreply@recdesk.io';
+      this.configService.get<string>('ses.fromEmail') || 'noreply@recdesk.io';
     this.frontendUrl =
       this.configService.get<string>('frontend.url') || 'http://localhost:3001';
 
-    if (apiKey && apiKey !== 'your-sendgrid-api-key') {
-      sgMail.setApiKey(apiKey);
+    if (region && accessKeyId && secretAccessKey) {
+      this.sesClient = new SESv2Client({
+        region,
+        credentials: { accessKeyId, secretAccessKey },
+      });
       this.isConfigured = true;
-      this.logger.log('TransactionalEmailService: SendGrid configured');
+      this.logger.log('TransactionalEmailService: AWS SES configured');
     } else {
       this.isConfigured = false;
       this.logger.warn(
-        'TransactionalEmailService: SendGrid not configured - emails will be logged only',
+        'TransactionalEmailService: AWS SES not configured - emails will be logged only',
       );
     }
   }
@@ -71,25 +78,23 @@ export class TransactionalEmailService {
    */
   async sendUserInvitationEmail(
     email: string,
-    tempPassword: string,
+    acceptLink: string,
     inviterName: string,
     companyName: string,
+    roleLabel: string,
   ): Promise<{ success: boolean; error?: string }> {
     const subject = `You've been invited to join ${companyName} on RecDesk`;
-    const loginUrl = `${this.frontendUrl}/auth/login`;
     const html = this.buildInvitationHtml(
-      email,
-      tempPassword,
       inviterName,
       companyName,
-      loginUrl,
+      roleLabel,
+      acceptLink,
     );
     const text = this.buildInvitationText(
-      email,
-      tempPassword,
       inviterName,
       companyName,
-      loginUrl,
+      roleLabel,
+      acceptLink,
     );
 
     return this.send(email, subject, html, text);
@@ -105,7 +110,7 @@ export class TransactionalEmailService {
     html: string,
     text: string,
   ): Promise<{ success: boolean; error?: string }> {
-    if (!this.isConfigured) {
+    if (!this.isConfigured || !this.sesClient) {
       this.logger.log(`[DEV MODE] Transactional email would be sent to: ${to}`);
       this.logger.log(`[DEV MODE] Subject: ${subject}`);
       this.logger.debug(
@@ -115,22 +120,31 @@ export class TransactionalEmailService {
     }
 
     try {
-      await sgMail.send({
-        to,
-        from: { email: this.fromEmail, name: 'RecDesk' },
-        subject,
-        text,
-        html,
-      });
+      await this.sesClient.send(
+        new SendEmailCommand({
+          FromEmailAddress: `RecDesk <${this.fromEmail}>`,
+          Destination: { ToAddresses: [to] },
+          Content: {
+            Simple: {
+              Subject: { Data: subject, Charset: 'UTF-8' },
+              Body: {
+                Text: { Data: text, Charset: 'UTF-8' },
+                Html: { Data: html, Charset: 'UTF-8' },
+              },
+            },
+          },
+        }),
+      );
       this.logger.log(`Transactional email sent to: ${to} (${subject})`);
       return { success: true };
     } catch (error: any) {
+      const detail = error.message;
       this.logger.error(
-        `Failed to send transactional email to ${to}: ${error.message}`,
+        `Failed to send transactional email to ${to}: ${detail}`,
       );
       return {
         success: false,
-        error: error.message || 'Failed to send email',
+        error: detail || 'Failed to send email',
       };
     }
   }
@@ -247,57 +261,44 @@ export class TransactionalEmailService {
   }
 
   private buildInvitationHtml(
-    email: string,
-    tempPassword: string,
     inviterName: string,
     companyName: string,
-    loginUrl: string,
+    roleLabel: string,
+    acceptLink: string,
   ): string {
     const content = `
       <p style="margin:0 0 16px;">Hi there,</p>
-      <p style="margin:0 0 16px;"><strong>${inviterName}</strong> has invited you to join <strong>${companyName}</strong> on RecDesk.</p>
-      <p style="margin:0 0 8px;">Here are your temporary login credentials:</p>
-      <table cellpadding="0" cellspacing="0" style="margin:8px 0 24px;background-color:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;width:100%;">
-        <tr>
-          <td style="padding:16px 20px;">
-            <p style="margin:0 0 8px;font-size:13px;color:#64748B;">Email</p>
-            <p style="margin:0 0 16px;font-weight:600;">${email}</p>
-            <p style="margin:0 0 8px;font-size:13px;color:#64748B;">Temporary Password</p>
-            <p style="margin:0;font-weight:600;font-family:monospace;font-size:16px;letter-spacing:1px;">${tempPassword}</p>
-          </td>
-        </tr>
-      </table>
+      <p style="margin:0 0 16px;"><strong>${inviterName}</strong> has invited you to join <strong>${companyName}</strong> on RecDesk as a <strong>${roleLabel}</strong>.</p>
+      <p style="margin:0 0 24px;">Click the button below to set your password and activate your account.</p>
       <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
         <tr>
           <td style="background-color:#1E40AF;border-radius:6px;">
-            <a href="${loginUrl}" style="display:inline-block;padding:12px 28px;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;">Log In to RecDesk</a>
+            <a href="${acceptLink}" style="display:inline-block;padding:12px 28px;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;">Accept Invitation</a>
           </td>
         </tr>
       </table>
-      <p style="margin:0 0 16px;color:#64748B;font-size:13px;">We recommend changing your password after your first login.</p>`;
+      <p style="margin:0 0 8px;color:#64748B;font-size:13px;">Or copy and paste this link into your browser:</p>
+      <p style="margin:0 0 16px;color:#3B82F6;font-size:13px;word-break:break-all;">${acceptLink}</p>
+      <p style="margin:0 0 16px;color:#64748B;font-size:13px;">This invitation expires in 7 days. If you weren't expecting it, you can safely ignore this email.</p>`;
 
     return this.baseWrapper(content);
   }
 
   private buildInvitationText(
-    email: string,
-    tempPassword: string,
     inviterName: string,
     companyName: string,
-    loginUrl: string,
+    roleLabel: string,
+    acceptLink: string,
   ): string {
     return [
       'Hi there,',
       '',
-      `${inviterName} has invited you to join ${companyName} on RecDesk.`,
+      `${inviterName} has invited you to join ${companyName} on RecDesk as a ${roleLabel}.`,
       '',
-      'Your temporary login credentials:',
-      `  Email: ${email}`,
-      `  Password: ${tempPassword}`,
+      'Set your password and activate your account here:',
+      `  ${acceptLink}`,
       '',
-      `Log in here: ${loginUrl}`,
-      '',
-      'We recommend changing your password after your first login.',
+      "This invitation expires in 7 days. If you weren't expecting it, you can safely ignore this email.",
       '',
       '-- RecDesk AI',
     ].join('\n');

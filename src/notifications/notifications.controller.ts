@@ -28,9 +28,10 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Subscribe to real-time notifications via SSE' })
   subscribeToNotifications(@Req() req: any): Observable<MessageEvent> {
     const companyId = req.user?.companyId;
+    const userId = req.user?.id;
 
-    if (!companyId) {
-      // Return an observable that immediately completes if no company
+    if (!companyId || !userId) {
+      // Return an observable that immediately completes if no company/user
       return new Observable((subscriber) => {
         subscriber.error(new Error('Unauthorized'));
       });
@@ -47,7 +48,7 @@ export class NotificationsController {
     );
 
     const notifications$ = this.notificationsService
-      .subscribeToCompany(companyId)
+      .subscribeForUser(companyId, userId)
       .pipe(
         map((notification) => ({ type: 'notification', data: notification })),
       );
@@ -87,7 +88,8 @@ export class NotificationsController {
     @Query() query: NotificationQueryDto,
   ) {
     const companyId = req.user?.companyId;
-    return this.notificationsService.getNotifications(companyId, {
+    const userId = req.user?.id;
+    return this.notificationsService.getNotifications(companyId, userId, {
       page: query.page,
       limit: query.limit,
       unreadOnly: query.unreadOnly,
@@ -98,7 +100,11 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Get unread notification count' })
   async getUnreadCount(@Req() req: any) {
     const companyId = req.user?.companyId;
-    const count = await this.notificationsService.getUnreadCount(companyId);
+    const userId = req.user?.id;
+    const count = await this.notificationsService.getUnreadCount(
+      companyId,
+      userId,
+    );
     return { count };
   }
 
@@ -106,7 +112,8 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Mark a notification as read' })
   async markAsRead(@Req() req: any, @Param('id') id: string) {
     const companyId = req.user?.companyId;
-    await this.notificationsService.markAsRead(id, companyId);
+    const userId = req.user?.id;
+    await this.notificationsService.markAsRead(id, companyId, userId);
     return { success: true };
   }
 
@@ -114,7 +121,8 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Mark all notifications as read' })
   async markAllAsRead(@Req() req: any) {
     const companyId = req.user?.companyId;
-    await this.notificationsService.markAllAsRead(companyId);
+    const userId = req.user?.id;
+    await this.notificationsService.markAllAsRead(companyId, userId);
     return { success: true };
   }
 }

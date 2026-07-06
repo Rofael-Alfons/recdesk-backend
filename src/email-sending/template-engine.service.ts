@@ -15,6 +15,11 @@ export interface PersonalizationContext {
     firstName: string;
     lastName: string;
   };
+  interview?: {
+    bookingLink?: string;
+    date?: string;
+    time?: string;
+  };
 }
 
 @Injectable()
@@ -30,6 +35,9 @@ export class TemplateEngineService {
       '{{job_title}}': context.job?.title || 'the position',
       '{{company_name}}': context.company.name,
       '{{sender_name}}': `${context.sender.firstName} ${context.sender.lastName}`,
+      '{{booking_link}}': context.interview?.bookingLink || '',
+      '{{interview_date}}': context.interview?.date || '',
+      '{{interview_time}}': context.interview?.time || '',
     };
 
     let result = template;
@@ -94,6 +102,9 @@ export class TemplateEngineService {
       '{{job_title}}',
       '{{company_name}}',
       '{{sender_name}}',
+      '{{booking_link}}',
+      '{{interview_date}}',
+      '{{interview_time}}',
     ];
 
     const usedTokens = this.extractTokens(template);

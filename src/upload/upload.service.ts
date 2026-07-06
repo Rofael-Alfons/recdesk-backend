@@ -256,6 +256,7 @@ export class UploadService {
 
       const scoreResult = await this.aiService.scoreCandidate(parsedCV, {
         title: job.title,
+        description: job.description ?? undefined,
         requiredSkills: job.requiredSkills,
         preferredSkills: job.preferredSkills,
         experienceLevel: job.experienceLevel,

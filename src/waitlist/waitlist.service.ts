@@ -53,13 +53,34 @@ export class WaitlistService {
 
     if (this.welcomeEmailEnabled) {
       const displayName = dto.name?.trim() || 'there';
+      this.logger.log(`Sending waitlist welcome email to: ${emailLower}`);
       this.transactionalEmail
         .sendWaitlistWelcomeEmail(emailLower, displayName, position)
-        .catch((err) =>
+        .then((result) => {
+          if (result.success) {
+            this.logger.log(
+              `Waitlist welcome email sent successfully to: ${emailLower}`,
+            );
+          } else {
+            this.logger.error(
+              `Waitlist welcome email failed for ${emailLower}: ${result.error}`,
+            );
+          }
+        })
+        .catch((err) => {
           this.logger.error(
-            `Failed to send waitlist welcome email: ${err.message}`,
-          ),
-        );
+            `Waitlist welcome email unexpected error for ${emailLower}: ${err.message}`,
+          );
+          if (err.response?.body) {
+            this.logger.error(
+              `SendGrid error details: ${JSON.stringify(err.response.body)}`,
+            );
+          }
+        });
+    } else {
+      this.logger.warn(
+        `Waitlist welcome email is disabled, skipping for: ${emailLower}`,
+      );
     }
 
     return { alreadySubscribed: false, position };
