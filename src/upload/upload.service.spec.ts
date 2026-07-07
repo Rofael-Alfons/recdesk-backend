@@ -189,7 +189,7 @@ describe('UploadService', () => {
       expect(result.results[0].error).toContain('Could not extract text');
     });
 
-    it('returns failed result for duplicate email', async () => {
+    it('returns failed result for duplicate email found in raw CV text, without calling AI', async () => {
       prisma.candidate.findFirst.mockResolvedValue({ id: 'existing' });
 
       const result = await service.uploadBulkCVs(
@@ -199,6 +199,34 @@ describe('UploadService', () => {
 
       expect(result.failed).toBe(1);
       expect(result.results[0].error).toContain('Duplicate');
+      expect(aiService.parseCV).not.toHaveBeenCalled();
+      expect(billingService.trackUsage).not.toHaveBeenCalledWith(
+        companyId,
+        UsageType.AI_PARSING_CALL,
+      );
+    });
+
+    it('falls back to AI-parsed email for duplicate detection when the raw text has no email', async () => {
+      fileProcessing.extractText.mockResolvedValue({
+        text: 'Jane Doe\nExperience: 3 years\nSkills: TypeScript\nEducation: CS degree',
+        confidence: 80,
+      });
+      // No duplicate on the pre-check (no email in raw text to look up);
+      // duplicate only surfaces once the AI has parsed the email.
+      prisma.candidate.findFirst.mockResolvedValue({ id: 'existing' });
+
+      const result = await service.uploadBulkCVs(
+        [makeFile('jane-doe.pdf')],
+        companyId,
+      );
+
+      expect(result.failed).toBe(1);
+      expect(result.results[0].error).toContain('Duplicate');
+      expect(aiService.parseCV).toHaveBeenCalled();
+      expect(billingService.trackUsage).toHaveBeenCalledWith(
+        companyId,
+        UsageType.AI_PARSING_CALL,
+      );
     });
   });
 });
