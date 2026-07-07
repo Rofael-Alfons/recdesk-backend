@@ -243,8 +243,16 @@ export class OutlookMonitorService {
       }
     }
 
+    if (!graphMessage.internetMessageId) {
+      this.logger.debug(
+        `Outlook message ${graphMessage.id} has no internetMessageId (stale cached $select or system message) — using raw Graph id as dedup key fallback`,
+      );
+    }
+
     return {
-      messageId: graphMessage.id,
+      // internetMessageId (RFC2822 Message-ID) is stable forever; Graph's raw
+      // `id` changes if the message moves folders, so it's only a fallback.
+      messageId: graphMessage.internetMessageId || graphMessage.id,
       subject: graphMessage.subject || '',
       senderEmail,
       senderName,

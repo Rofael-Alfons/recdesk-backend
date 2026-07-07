@@ -112,4 +112,60 @@ describe('OutlookMonitorService', () => {
     expect(result.results).toHaveLength(2);
     expect(outlookGraph.fetchNewMessages).toHaveBeenCalled();
   });
+
+  describe('normalizeOutlookMessage dedup key', () => {
+    beforeEach(() => {
+      prisma.emailConnection.findUnique.mockResolvedValue({
+        id: 'conn-1',
+        companyId: 'comp-1',
+        email: 'jobs@acme.com',
+      });
+    });
+
+    it('uses internetMessageId as the dedup key when present', async () => {
+      outlookGraph.fetchNewMessages.mockResolvedValue({
+        messages: [
+          {
+            id: 'graph-raw-id',
+            internetMessageId: '<abc123@mail.example.com>',
+            from: { emailAddress: { address: 'candidate@example.com', name: 'Candidate' } },
+            receivedDateTime: '2026-03-01T00:00:00.000Z',
+            body: { contentType: 'text', content: 'hello' },
+            hasAttachments: false,
+          },
+        ],
+        deltaLink: 'delta-link',
+      });
+
+      await service.pollEmailsForConnection('conn-1');
+
+      expect(emailProcessing.processNormalizedEmail).toHaveBeenCalledWith(
+        expect.objectContaining({ messageId: '<abc123@mail.example.com>' }),
+        expect.any(Object),
+      );
+    });
+
+    it('falls back to the raw Graph id when internetMessageId is missing', async () => {
+      outlookGraph.fetchNewMessages.mockResolvedValue({
+        messages: [
+          {
+            id: 'graph-raw-id',
+            internetMessageId: '',
+            from: { emailAddress: { address: 'candidate@example.com', name: 'Candidate' } },
+            receivedDateTime: '2026-03-01T00:00:00.000Z',
+            body: { contentType: 'text', content: 'hello' },
+            hasAttachments: false,
+          },
+        ],
+        deltaLink: 'delta-link',
+      });
+
+      await service.pollEmailsForConnection('conn-1');
+
+      expect(emailProcessing.processNormalizedEmail).toHaveBeenCalledWith(
+        expect.objectContaining({ messageId: 'graph-raw-id' }),
+        expect.any(Object),
+      );
+    });
+  });
 });

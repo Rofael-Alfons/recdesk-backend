@@ -33,6 +33,21 @@ export class OutlookGraphService {
   }
 
   /**
+   * Headers for Graph calls that read message-resource data. Requests
+   * immutable IDs so `id` stays stable even if the item moves folders within
+   * the mailbox (learn.microsoft.com/graph/outlook-immutable-id). Intentionally
+   * NOT used for /subscriptions calls: that resource doesn't support immutable
+   * IDs, and handleChangeNotification() never reads a message id out of the
+   * notification payload anyway.
+   */
+  private messageReadHeaders(accessToken: string): Record<string, string> {
+    return {
+      Authorization: `Bearer ${accessToken}`,
+      Prefer: 'IdType="ImmutableId"',
+    };
+  }
+
+  /**
    * Create a Graph change notification subscription for an Outlook connection.
    * Subscribes to new messages in the user's inbox.
    * Max subscription TTL is ~4230 minutes (~2.9 days) for mail resources.
@@ -330,8 +345,38 @@ export class OutlookGraphService {
   }
 
   /**
+   * Build a delta-query URL that establishes a forward-only sync baseline
+   * anchored at `sinceDate`. This intentionally returns NO historical
+   * messages — only a fresh @odata.deltaLink representing the baseline —
+   * because Microsoft Graph's `$deltatoken=latest` "sync from now" shortcut
+   * is documented as supported only for Entra ID / OneDrive-SharePoint
+   * resources, NOT for mail messages (learn.microsoft.com/graph/delta-query-overview).
+   * For messages, the supported mechanism is `$filter=receivedDateTime ge
+   * {value}` combined with $select/$top.
+   *
+   * INTENTIONAL, NOT A BUG: do not remove this filter to "simplify" the
+   * query — doing so re-introduces full-mailbox enumeration on first
+   * connect (every historical email gets AI-classified/CV-parsed/S3-
+   * uploaded, with no queue or rate-limit handling). If a deliberate
+   * historical-backfill feature is ever built, it should be a separate,
+   * explicitly opt-in code path — not a change to this method.
+   */
+  private buildForwardOnlySyncUrl(sinceDate: Date): string {
+    const filter = encodeURIComponent(
+      `receivedDateTime ge ${sinceDate.toISOString()}`,
+    );
+    return `${GRAPH_BASE}/me/mailFolders('Inbox')/messages/delta?$select=id,subject,from,receivedDateTime,body,hasAttachments,internetMessageHeaders,internetMessageId&$filter=${filter}&$top=50`;
+  }
+
+  /**
    * Fetch new messages using delta query (incremental sync).
    * Returns messages and the new delta link for next sync.
+   *
+   * Forward-only contract: on a connection's first sync (no stored delta
+   * link yet) or after a delta link expires (410), this does NOT enumerate
+   * the mailbox's historical contents — it only establishes a baseline
+   * anchored at connection time (or last successful sync), per PRD
+   * "Only monitor emails arriving after connection".
    */
   async fetchNewMessages(
     connectionId: string,
@@ -357,15 +402,16 @@ export class OutlookGraphService {
       // lastHistoryId stores the delta link for Outlook
       url = connection.lastHistoryId;
     } else {
-      // Initial sync: fetch recent inbox messages
-      url = `${GRAPH_BASE}/me/mailFolders('Inbox')/messages/delta?$select=id,subject,from,receivedDateTime,body,hasAttachments,internetMessageHeaders&$top=50`;
+      // Initial sync: forward-only baseline anchored at connection creation
+      // time, per PRD "Only monitor emails arriving after connection".
+      url = this.buildForwardOnlySyncUrl(connection.createdAt);
     }
 
     try {
       // Paginate through all results
       do {
         const response = await axios.get(url, {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: this.messageReadHeaders(accessToken),
         });
 
         const data = response.data;
@@ -385,13 +431,14 @@ export class OutlookGraphService {
       // If delta link is invalid/expired, start fresh
       if (error.response?.status === 410) {
         this.logger.warn(
-          `Delta link expired for connection ${connectionId}, starting fresh sync`,
+          `Delta link expired for connection ${connectionId}, re-establishing forward-only baseline (not re-enumerating mailbox)`,
         );
 
-        const freshUrl = `${GRAPH_BASE}/me/mailFolders('Inbox')/messages/delta?$select=id,subject,from,receivedDateTime,body,hasAttachments,internetMessageHeaders&$top=50`;
+        const anchor = connection.lastSyncAt ?? connection.createdAt;
+        const freshUrl = this.buildForwardOnlySyncUrl(anchor);
 
         const response = await axios.get(freshUrl, {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: this.messageReadHeaders(accessToken),
         });
 
         const data = response.data;
@@ -426,7 +473,7 @@ export class OutlookGraphService {
     const response = await axios.get(
       `${GRAPH_BASE}/me/messages/${messageId}/attachments`,
       {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: this.messageReadHeaders(accessToken),
       },
     );
 
