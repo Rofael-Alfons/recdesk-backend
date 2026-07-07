@@ -83,15 +83,34 @@ export class EmailProcessingService {
       return { imported: false };
     }
 
-    // Check if already processed
+    // Check if already processed. A message is only a permanent duplicate if
+    // it actually resulted in a candidate that still exists — if the
+    // candidate was since deleted (or the prior attempt never created one,
+    // e.g. it was skipped as a duplicate itself), this message is eligible
+    // to be reprocessed instead of tombstoned forever.
     const existingImport = await this.prisma.emailImport.findUnique({
       where: { messageId: email.messageId },
     });
 
     if (existingImport) {
-      this.logger.log(`Email ${email.messageId} already processed, skipping`);
-      return { imported: false };
+      const linkedCandidate = await this.prisma.candidate.findFirst({
+        where: { emailImportId: existingImport.id },
+        select: { id: true },
+      });
+
+      if (linkedCandidate) {
+        this.logger.log(
+          `Email ${email.messageId} already processed, skipping`,
+        );
+        return { imported: false };
+      }
+
+      this.logger.log(
+        `Email ${email.messageId} was previously processed but has no surviving candidate, reprocessing`,
+      );
     }
+
+    const reprocessImportId = existingImport?.id ?? null;
 
     // Skip emails sent BY the connected account
     if (email.senderEmail.toLowerCase() === connection.email.toLowerCase()) {
@@ -129,21 +148,28 @@ export class EmailProcessingService {
 
     // Handle skip
     if (prefilterResult.action === 'skip') {
-      await this.prisma.emailImport.create({
-        data: {
-          messageId: email.messageId,
-          subject: email.subject,
-          senderEmail: email.senderEmail,
-          senderName: email.senderName,
-          receivedAt: email.receivedAt,
-          isJobApplication: false,
-          confidence: 0,
-          status: 'SKIPPED',
-          skipReason: prefilterResult.reason,
-          processedAt: new Date(),
-          emailConnectionId: connection.id,
-        },
-      });
+      const skipData = {
+        messageId: email.messageId,
+        subject: email.subject,
+        senderEmail: email.senderEmail,
+        senderName: email.senderName,
+        receivedAt: email.receivedAt,
+        isJobApplication: false,
+        confidence: 0,
+        status: 'SKIPPED' as const,
+        skipReason: prefilterResult.reason,
+        processedAt: new Date(),
+        emailConnectionId: connection.id,
+      };
+
+      if (reprocessImportId) {
+        await this.prisma.emailImport.update({
+          where: { id: reprocessImportId },
+          data: skipData,
+        });
+      } else {
+        await this.prisma.emailImport.create({ data: skipData });
+      }
       return { imported: false };
     }
 
@@ -182,27 +208,33 @@ export class EmailProcessingService {
       );
     }
 
-    // Create email import record
-    const emailImport = await this.prisma.emailImport.create({
-      data: {
-        messageId: email.messageId,
-        subject: email.subject,
-        senderEmail: email.senderEmail,
-        senderName: email.senderName,
-        receivedAt: email.receivedAt,
-        isJobApplication: classification.isJobApplication,
-        confidence: classification.confidence,
-        detectedPosition: classification.detectedPosition,
-        bodyText: email.bodyText,
-        bodyHtml: email.bodyHtml,
-        status: 'PENDING',
-        skipReason:
-          prefilterResult.action === 'auto_classify'
-            ? `Auto-classified: ${prefilterResult.reason}`
-            : null,
-        emailConnectionId: connection.id,
-      },
-    });
+    // Create (or, when reprocessing a message whose candidate no longer
+    // exists, update) the email import record
+    const pendingData = {
+      messageId: email.messageId,
+      subject: email.subject,
+      senderEmail: email.senderEmail,
+      senderName: email.senderName,
+      receivedAt: email.receivedAt,
+      isJobApplication: classification.isJobApplication,
+      confidence: classification.confidence,
+      detectedPosition: classification.detectedPosition,
+      bodyText: email.bodyText,
+      bodyHtml: email.bodyHtml,
+      status: 'PENDING' as const,
+      skipReason:
+        prefilterResult.action === 'auto_classify'
+          ? `Auto-classified: ${prefilterResult.reason}`
+          : null,
+      emailConnectionId: connection.id,
+    };
+
+    const emailImport = reprocessImportId
+      ? await this.prisma.emailImport.update({
+          where: { id: reprocessImportId },
+          data: pendingData,
+        })
+      : await this.prisma.emailImport.create({ data: pendingData });
 
     // Auto-import if high confidence job application
     if (
@@ -224,23 +256,36 @@ export class EmailProcessingService {
           CV_MIME_TYPES.includes(a.mimeType),
         );
 
-        if (cvAttachments.length > 0) {
-          await this.processCvAttachment(
-            cvAttachments[0].data,
-            cvAttachments[0].filename,
-            cvAttachments[0].mimeType,
-            emailImport,
-            connection.companyId,
-            classification.detectedPosition,
-          );
-        } else {
-          await this.createCandidateFromEmail(
-            emailImport,
-            connection.companyId,
-            email.senderEmail,
-            email.senderName,
-            { detectedPosition: classification.detectedPosition },
-          );
+        const created =
+          cvAttachments.length > 0
+            ? await this.processCvAttachment(
+                cvAttachments[0].data,
+                cvAttachments[0].filename,
+                cvAttachments[0].mimeType,
+                emailImport,
+                connection.companyId,
+                classification.detectedPosition,
+              )
+            : await this.createCandidateFromEmail(
+                emailImport,
+                connection.companyId,
+                email.senderEmail,
+                email.senderName,
+                { detectedPosition: classification.detectedPosition },
+              );
+
+        if (!created) {
+          await this.prisma.emailImport.update({
+            where: { id: emailImport.id },
+            data: {
+              status: 'SKIPPED',
+              processedAt: new Date(),
+              skipReason: 'Duplicate candidate email',
+              bodyText: null,
+              bodyHtml: null,
+            },
+          });
+          return { imported: false };
         }
 
         await this.prisma.emailImport.update({
@@ -302,7 +347,7 @@ export class EmailProcessingService {
     emailImport: any,
     companyId: string,
     detectedPosition?: string | null,
-  ): Promise<void> {
+  ): Promise<boolean> {
     // Upload file to S3
     const uploadResult = await this.storageService.uploadFile(
       fileBuffer,
@@ -324,6 +369,20 @@ export class EmailProcessingService {
 
     if (!extraction.text || extraction.confidence < 30) {
       throw new Error('Could not extract text from CV attachment');
+    }
+
+    // Cheap pre-check: the sender's email is already known for free (no AI
+    // needed), so check for a duplicate before paying for AI parsing.
+    const senderEmail = emailImport.senderEmail.toLowerCase();
+    const existingBySender = await this.prisma.candidate.findFirst({
+      where: { companyId, email: senderEmail },
+    });
+
+    if (existingBySender) {
+      this.logger.warn(
+        `Duplicate candidate with email ${senderEmail}, skipping`,
+      );
+      return false;
     }
 
     // Parse CV using AI
@@ -360,7 +419,7 @@ export class EmailProcessingService {
 
     if (existing) {
       this.logger.warn(`Duplicate candidate with email ${email}, skipping`);
-      return;
+      return false;
     }
 
     // Find matching job
@@ -412,6 +471,8 @@ export class EmailProcessingService {
     if (jobId) {
       await this.scoreCandidate(candidate.id, jobId);
     }
+
+    return true;
   }
 
   /**
@@ -423,7 +484,7 @@ export class EmailProcessingService {
     senderEmail: string,
     senderName: string,
     classification: { detectedPosition?: string | null },
-  ): Promise<void> {
+  ): Promise<boolean> {
     const existing = await this.prisma.candidate.findFirst({
       where: { companyId, email: senderEmail.toLowerCase() },
     });
@@ -432,7 +493,7 @@ export class EmailProcessingService {
       this.logger.warn(
         `Duplicate candidate with email ${senderEmail}, skipping`,
       );
-      return;
+      return false;
     }
 
     let jobId: string | null = null;
@@ -467,6 +528,8 @@ export class EmailProcessingService {
     });
 
     this.logger.log(`Created candidate from email body (no CV attachment)`);
+
+    return true;
   }
 
   /**

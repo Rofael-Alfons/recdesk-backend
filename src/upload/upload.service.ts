@@ -130,6 +130,24 @@ export class UploadService {
         };
       }
 
+      // Cheap pre-check: if the raw CV text already reveals an email that
+      // matches an existing candidate, skip the AI parse call entirely
+      // instead of paying for it only to reject the result as a duplicate.
+      const emailHint = this.extractEmailHint(extraction.text);
+      if (emailHint) {
+        const existingByHint = await this.prisma.candidate.findFirst({
+          where: { companyId, email: emailHint },
+        });
+
+        if (existingByHint) {
+          return {
+            fileName,
+            status: 'failed',
+            error: `Duplicate: candidate with email ${emailHint} already exists`,
+          };
+        }
+      }
+
       // Parse CV using AI
       let parsedData;
       let aiSummary = null;
@@ -318,6 +336,11 @@ export class UploadService {
         )
         .join(' ') || 'Unknown Candidate'
     );
+  }
+
+  private extractEmailHint(text: string): string | null {
+    const match = text.match(/[\w.-]+@[\w.-]+\.\w+/);
+    return match ? match[0].toLowerCase() : null;
   }
 
   private extractBasicDataFromFilename(fileName: string) {
