@@ -26,17 +26,19 @@ model Company {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  users            User[]
-  jobs             Job[]
-  candidates       Candidate[]
-  emailConnections EmailConnection[]
-  subscription     Subscription?
-  usageRecords     UsageRecord[]
-  emailTemplates   EmailTemplate[]
-  notifications    Notification[]
-  invitations      Invitation[]
-  rolePermissions  RolePermission[]
-  interviews       Interview[]
+  users                 User[]
+  jobs                  Job[]
+  candidates            Candidate[]
+  emailConnections      EmailConnection[]
+  subscription          Subscription?
+  usageRecords          UsageRecord[]
+  emailTemplates        EmailTemplate[]
+  notifications         Notification[]
+  invitations           Invitation[]
+  rolePermissions       RolePermission[]
+  interviews            Interview[]
+  documentRequests      DocumentRequest[]
+  documentTemplateItems DocumentTemplateItem[]
 
   @@map("companies")
 }
@@ -79,16 +81,19 @@ model User {
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  candidateNotes      CandidateNote[]
-  candidateActions    CandidateAction[]
-  emailsSent          EmailSent[]
-  refreshTokens       RefreshToken[]
-  passwordResetTokens PasswordResetToken[]
-  notifications       Notification[]
-  sentInvitations     Invitation[]         @relation("InvitationInviter")
-  createdInterviews   Interview[]          @relation("InterviewCreatedBy")
-  assignedInterviews  Interview[]          @relation("InterviewInterviewer")
-  availabilitySchedule AvailabilitySchedule?
+  candidateNotes          CandidateNote[]
+  candidateActions        CandidateAction[]
+  emailsSent              EmailSent[]
+  refreshTokens           RefreshToken[]
+  passwordResetTokens     PasswordResetToken[]
+  notifications           Notification[]
+  sentInvitations         Invitation[]          @relation("InvitationInviter")
+  createdInterviews       Interview[]           @relation("InterviewCreatedBy")
+  assignedInterviews      Interview[]           @relation("InterviewInterviewer")
+  availabilitySchedule    AvailabilitySchedule?
+  interviewEvaluations    InterviewEvaluation[]
+  evaluationHistoryEdits  InterviewEvaluationHistory[]
+  createdDocumentRequests DocumentRequest[]     @relation("DocumentRequestCreatedBy")
 
   @@index([companyId])
   @@index([googleId])
@@ -198,10 +203,13 @@ model Job {
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  candidates      Candidate[]
-  candidateScores CandidateScore[]
-  pipelineStages  PipelineStage[]
-  interviews      Interview[]
+  candidates           Candidate[]
+  candidateScores      CandidateScore[]
+  candidateScoreHistory CandidateScoreHistory[]
+  pipelineStages       PipelineStage[]
+  interviews           Interview[]
+  interviewEvaluations InterviewEvaluation[]
+  documentRequests     DocumentRequest[]
 
   @@index([companyId, status])
   @@index([companyId, createdAt])
@@ -262,6 +270,12 @@ model Candidate {
   cvText               String? // Extracted text from CV
   extractionConfidence Int? // 0-100
 
+  // Photo — StorageService key of the flagged personal-photo checklist
+  // upload; same convention as cvFileUrl. Nullable, populated only once a
+  // candidate uploads a document flagged isPersonalPhoto.
+  photoUrl      String?
+  photoFileName String?
+
   // Parsed Data (JSONB)
   education      Json?
   experience     Json?
@@ -278,6 +292,12 @@ model Candidate {
   // Tags
   tags String[]
 
+  // Onboarding — set once status reaches HIRED; drives the automated
+  // welcome-email cron (welcome-email.scheduler.ts). Date-only, no time
+  // component: "morning of start date" is computed by the cron, not stored.
+  startDate          DateTime? @db.Date
+  welcomeEmailSentAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -290,12 +310,15 @@ model Candidate {
   emailImportId String?      @unique
   emailImport   EmailImport? @relation(fields: [emailImportId], references: [id])
 
-  scores       CandidateScore[]
-  stageHistory CandidateStage[]
-  notes        CandidateNote[]
-  actions      CandidateAction[]
-  emailsSent   EmailSent[]
-  interviews   Interview[]
+  scores               CandidateScore[]
+  scoreHistory         CandidateScoreHistory[]
+  stageHistory         CandidateStage[]
+  notes                CandidateNote[]
+  actions              CandidateAction[]
+  emailsSent           EmailSent[]
+  interviews           Interview[]
+  interviewEvaluations InterviewEvaluation[]
+  documentRequests     DocumentRequest[]
 
   @@index([companyId, overallScore])
   @@index([companyId, createdAt])
@@ -355,6 +378,100 @@ model CandidateScore {
   @@map("candidate_scores")
 }
 
+// Append-only log of every scoring event (initial score + every rescore) for
+// a candidate/job pair. CandidateScore above stays the current-state row
+// (upserted on candidateId+jobId); this table is insert-only, one row per
+// scoring event, so a candidate's full rescore history can be reconstructed.
+model CandidateScoreHistory {
+  id String @id @default(uuid())
+
+  overallScore     Int
+  skillsMatchScore Int?
+  experienceScore  Int?
+  educationScore   Int?
+  growthScore      Int?
+  bonusScore       Int?
+  scoreExplanation Json?
+  recommendation   String?
+  algorithmVersion String   @default("v1.0")
+  source           String? // which pipeline recorded this event (debugging aid)
+
+  scoredAt DateTime @default(now())
+
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  jobId String
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([candidateId, jobId, scoredAt])
+  @@map("candidate_score_history")
+}
+
+enum InterviewRecommendation {
+  ADVANCE
+  HOLD
+  REJECT
+}
+
+// Human interview scorecards — independent of CandidateScore (AI-generated).
+// Never merged/averaged with it; always displayed side by side.
+model InterviewEvaluation {
+  id String @id @default(uuid())
+
+  overallRating  Int // 1-5
+  criteria       Json? // { communication?, technicalSkill?, problemSolving?, cultureFit? }, each 1-5
+  notes          String?
+  recommendation InterviewRecommendation
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  jobId String
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  evaluatorId String
+  evaluator   User   @relation(fields: [evaluatorId], references: [id], onDelete: Cascade)
+
+  history InterviewEvaluationHistory[]
+
+  @@unique([candidateId, jobId, evaluatorId])
+  @@index([candidateId, jobId])
+  @@index([evaluatorId])
+  @@map("interview_evaluations")
+}
+
+// Snapshot of an InterviewEvaluation's fields immediately before each edit is
+// applied. The "live" values always stay on InterviewEvaluation itself; one
+// history row is inserted per edit so prior versions can be reconstructed.
+model InterviewEvaluationHistory {
+  id String @id @default(uuid())
+
+  overallRating  Int
+  criteria       Json?
+  notes          String?
+  recommendation InterviewRecommendation
+
+  // The evaluation's own updatedAt/createdAt at the moment this snapshot was
+  // taken (i.e. when this version was superseded by the edit).
+  versionCreatedAt DateTime
+  createdAt        DateTime @default(now())
+
+  interviewEvaluationId String
+  interviewEvaluation   InterviewEvaluation @relation(fields: [interviewEvaluationId], references: [id], onDelete: Cascade)
+
+  // Nullable + SetNull: removing a user account must never destroy audit
+  // history, only its "edited by" attribution.
+  editedById String?
+  editedBy   User?   @relation(fields: [editedById], references: [id], onDelete: SetNull)
+
+  @@index([interviewEvaluationId, createdAt])
+  @@map("interview_evaluation_history")
+}
+
 model CandidateStage {
   id      String   @id @default(uuid())
   movedAt DateTime @default(now())
@@ -389,15 +506,17 @@ model CandidateNote {
 
 model CandidateAction {
   id        String   @id @default(uuid())
-  action    String // e.g., "moved_to_stage", "shortlisted", "rejected", "email_sent"
+  action    String // e.g., "moved_to_stage", "shortlisted", "rejected", "email_sent", "welcome_email_sent"
   details   Json?
   createdAt DateTime @default(now())
 
   candidateId String
   candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Nullable: automated actions (e.g. the welcome-email cron) have no
+  // acting user. onDelete: SetNull so deleting a user preserves the log.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([candidateId, createdAt])
   @@index([userId])
@@ -500,6 +619,110 @@ enum InterviewLocationType {
   ONLINE
   PHONE
   ONSITE
+}
+
+// ============================================
+// DOCUMENT COLLECTION (offered-candidate document requests)
+// ============================================
+
+model DocumentRequest {
+  id String @id @default(uuid())
+
+  status DocumentRequestStatus @default(PENDING)
+
+  // Public candidate upload token (unguessable), mirrors Interview.bookingToken
+  token String @unique
+
+  // Time-box for the upload link itself.
+  expiresAt DateTime
+
+  // Retention policy anchor: createdAt + retentionDays, recomputed to
+  // completedAt + retentionDays once status reaches COMPLETE.
+  retentionExpiresAt DateTime
+
+  message      String? // optional note shown to the candidate on the public page
+  completedAt  DateTime?
+  lastNudgedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  jobId String?
+  job   Job?    @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  createdById String
+  createdBy   User   @relation("DocumentRequestCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+
+  items DocumentChecklistItem[]
+
+  @@index([companyId, status])
+  @@index([candidateId])
+  @@map("document_requests")
+}
+
+model DocumentChecklistItem {
+  id              String  @id @default(uuid())
+  name            String // e.g. "National ID (front + back)"
+  description     String?
+  required        Boolean @default(true)
+  isPersonalPhoto Boolean @default(false) // copied from template/DTO at request-creation time; at most one per request
+  orderIndex      Int
+
+  requestId String
+  request   DocumentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  uploads DocumentUpload[]
+
+  @@index([requestId, orderIndex])
+  @@map("document_checklist_items")
+}
+
+model DocumentUpload {
+  id         String   @id @default(uuid())
+  fileKey    String // StorageService key, same convention as Candidate.cvFileUrl
+  fileName   String
+  fileSize   Int
+  mimeType   String
+  uploadedAt DateTime @default(now())
+
+  checklistItemId String
+  checklistItem   DocumentChecklistItem @relation(fields: [checklistItemId], references: [id], onDelete: Cascade)
+
+  @@index([checklistItemId])
+  @@map("document_uploads")
+}
+
+enum DocumentRequestStatus {
+  PENDING
+  PARTIAL
+  COMPLETE
+  EXPIRED
+}
+
+// Recruiter-managed presets that populate the "Request documents" dialog.
+// Copied into a real DocumentChecklistItem at request-creation time — no FK
+// back here, so editing/deleting a preset never retroactively changes an
+// already-sent request.
+model DocumentTemplateItem {
+  id               String  @id @default(uuid())
+  name             String
+  description      String?
+  required         Boolean @default(true)
+  includeByDefault Boolean @default(true) // pre-checked when the dialog opens
+  isPersonalPhoto  Boolean @default(false) // at most one per company; enforced in DocumentTemplatesService
+  orderIndex       Int
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, orderIndex])
+  @@map("document_template_items")
 }
 
 // ============================================
@@ -659,6 +882,7 @@ enum EmailTemplateType {
   INTERVIEW_INVITE
   OFFER
   FOLLOW_UP
+  WELCOME
   CUSTOM
 }
 
@@ -673,8 +897,10 @@ model EmailSent {
   candidateId String
   candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
-  sentById String
-  sentBy   User   @relation(fields: [sentById], references: [id], onDelete: Cascade)
+  // Nullable: automated sends (e.g. the welcome-email cron) have no acting
+  // user. onDelete: SetNull so deleting a user doesn't wipe email history.
+  sentById String?
+  sentBy   User?   @relation(fields: [sentById], references: [id], onDelete: SetNull)
 
   @@index([candidateId])
   @@index([sentById])
@@ -810,6 +1036,8 @@ enum NotificationType {
   // Interview scheduling
   INTERVIEW_AVAILABILITY_REQUEST // Manager asked to submit availability
   INTERVIEW_SCHEDULED // Candidate booked an interview slot
+  // Document collection
+  DOCUMENT_UPLOADED // Candidate uploaded/completed requested documents
 }
 
 model Notification {

@@ -14,6 +14,7 @@ import {
 import { BillingService } from '../billing/billing.service';
 import { SendEmailDto, BulkSendEmailDto, PreviewEmailDto } from './dto';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
+import { EmailTemplateType } from '../email-templates/dto';
 
 export interface CalendarAttachment {
   /** Raw .ics file content */
@@ -154,6 +155,92 @@ export class EmailSendingService {
             subject,
           },
         },
+      });
+    }
+
+    return {
+      candidateId: candidate.id,
+      candidateName: candidate.fullName,
+      candidateEmail: candidate.email,
+      ...result,
+    };
+  }
+
+  /**
+   * Send the automated onboarding welcome email to a HIRED candidate on the
+   * morning of their start date. System-triggered (no acting user) —
+   * called by WelcomeEmailScheduler. Uses the company's default WELCOME
+   * template; no-ops if the company hasn't configured one.
+   */
+  async sendWelcomeEmail(
+    candidateId: string,
+    companyId: string,
+  ): Promise<SendResult | null> {
+    const candidate = await this.prisma.candidate.findFirst({
+      where: { id: candidateId, companyId },
+      include: { job: { select: { title: true } } },
+    });
+
+    if (!candidate || !candidate.email || !candidate.startDate) {
+      return null;
+    }
+
+    const template = await this.emailTemplatesService.findDefaultByType(
+      EmailTemplateType.WELCOME,
+      companyId,
+    );
+
+    if (!template) {
+      this.logger.warn(
+        `No default WELCOME email template configured for company ${companyId}; skipping welcome email for candidate ${candidateId}`,
+      );
+      return null;
+    }
+
+    const company = await this.prisma.company.findUnique({ where: { id: companyId } });
+    if (!company) {
+      return null;
+    }
+
+    const context: PersonalizationContext = {
+      candidate: {
+        fullName: candidate.fullName,
+        email: candidate.email,
+      },
+      job: candidate.job,
+      company: { name: company.name },
+      startDate: candidate.startDate.toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+        timeZone: 'UTC',
+      }),
+    };
+
+    const subject = this.templateEngine.render(template.subject, context);
+    const body = this.templateEngine.render(template.body, context);
+
+    const result = await this.sendViaProvider(candidate.email, subject, body);
+
+    if (result.success) {
+      await this.prisma.emailSent.create({
+        data: { subject, body, candidateId: candidate.id, sentById: null },
+      });
+
+      await this.billingService.trackUsage(companyId, 'EMAIL_SENT');
+
+      await this.prisma.candidateAction.create({
+        data: {
+          candidateId: candidate.id,
+          userId: null,
+          action: 'welcome_email_sent',
+          details: { templateId: template.id, templateName: template.name, subject },
+        },
+      });
+
+      await this.prisma.candidate.update({
+        where: { id: candidate.id },
+        data: { welcomeEmailSentAt: new Date() },
       });
     }
 

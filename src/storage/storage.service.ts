@@ -156,6 +156,7 @@ export class StorageService implements OnModuleInit {
           Key: key,
           Body: buffer,
           ContentType: contentType,
+          ServerSideEncryption: 'AES256',
         }),
       );
 

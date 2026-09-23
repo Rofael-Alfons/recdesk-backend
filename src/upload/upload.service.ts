@@ -7,6 +7,7 @@ import { BillingService } from '../billing/billing.service';
 import { StorageService } from '../storage/storage.service';
 import { UsageType } from '@prisma/client';
 import * as path from 'path';
+import { recordCandidateScoreHistory } from '../common/candidate-score-history.util';
 
 export interface UploadResult {
   fileName: string;
@@ -301,6 +302,20 @@ export class UploadService {
           recommendation: scoreResult.recommendation,
           scoreExplanation: scoreResult.scoreExplanation,
         },
+      });
+
+      await recordCandidateScoreHistory(this.prisma, {
+        candidateId,
+        jobId,
+        overallScore: scoreResult.overallScore,
+        skillsMatchScore: scoreResult.skillsMatchScore,
+        experienceScore: scoreResult.experienceScore,
+        educationScore: scoreResult.educationScore,
+        growthScore: scoreResult.growthScore,
+        bonusScore: scoreResult.bonusScore,
+        scoreExplanation: scoreResult.scoreExplanation,
+        recommendation: scoreResult.recommendation,
+        source: 'upload_create',
       });
 
       // Update candidate overall score

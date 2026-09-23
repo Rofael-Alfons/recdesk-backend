@@ -7,6 +7,7 @@ import {
   IsArray,
   IsUUID,
   IsUrl,
+  IsDateString,
   MaxLength,
 } from 'class-validator';
 import { CandidateSource, CandidateStatus } from '@prisma/client';
@@ -72,4 +73,12 @@ export class CreateCandidateDto {
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
+
+  @ApiPropertyOptional({
+    example: '2026-08-01',
+    description: 'Onboarding start date, typically set once status is HIRED',
+  })
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
 }

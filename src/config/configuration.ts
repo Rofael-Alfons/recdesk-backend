@@ -298,6 +298,22 @@ export default () => ({
       process.env.WAITLIST_WELCOME_EMAIL_ENABLED !== 'false', // Default: true
   },
 
+  // Candidate document collection (national ID, certificates, etc.)
+  documents: {
+    // How long a completed document request's files are retained before
+    // they're eligible for deletion. Stated policy shown in the staff UI;
+    // enforcement (automated purge) is a separate, not-yet-built job.
+    retentionDays: parseInt(
+      process.env.DOCUMENT_RETENTION_DAYS || '365',
+      10,
+    ),
+    // How long the candidate-facing upload link stays valid.
+    linkExpiryDays: parseInt(
+      process.env.DOCUMENT_LINK_EXPIRY_DAYS || '14',
+      10,
+    ),
+  },
+
   // Access allowlist gating for registration/login.
   // Comma-separated list of allowed emails and/or domains used to seed the
   // `allowed_emails` table on startup. Domains may be written as "@acme.com"

@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AiService, ParsedCVData } from '../../ai/ai.service';
 import { QUEUE_NAMES } from '../queue.constants';
 import type { ScoringJobData } from '../queue.service';
+import { recordCandidateScoreHistory } from '../../common/candidate-score-history.util';
 
 @Processor(QUEUE_NAMES.SCORING)
 export class ScoringProcessor {
@@ -112,6 +113,20 @@ export class ScoringProcessor {
           scoreExplanation: scoreResult.scoreExplanation || undefined,
           recommendation: scoreResult.recommendation,
         },
+      });
+
+      await recordCandidateScoreHistory(this.prisma, {
+        candidateId,
+        jobId,
+        overallScore: scoreResult.overallScore,
+        skillsMatchScore: scoreResult.skillsMatchScore,
+        experienceScore: scoreResult.experienceScore,
+        educationScore: scoreResult.educationScore,
+        growthScore: scoreResult.growthScore,
+        bonusScore: scoreResult.bonusScore,
+        scoreExplanation: scoreResult.scoreExplanation || undefined,
+        recommendation: scoreResult.recommendation,
+        source: 'queue_scoring',
       });
 
       // Update overall score on candidate if this is their assigned job

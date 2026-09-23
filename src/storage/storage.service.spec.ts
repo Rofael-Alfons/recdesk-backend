@@ -13,6 +13,16 @@ jest.mock('fs/promises', () => ({
   unlink: jest.fn().mockResolvedValue(undefined),
 }));
 
+const mockSend = jest.fn().mockResolvedValue({});
+jest.mock('@aws-sdk/client-s3', () => {
+  const actual = jest.requireActual('@aws-sdk/client-s3');
+  return {
+    ...actual,
+    S3Client: jest.fn().mockImplementation(() => ({ send: mockSend })),
+  };
+});
+
+import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { StorageService } from './storage.service';
 
 describe('StorageService', () => {
@@ -82,5 +92,53 @@ describe('StorageService', () => {
   it('identifies local paths', () => {
     expect(service.isLocalPath('/uploads/comp-1/cvs/a.pdf')).toBe(true);
     expect(service.isLocalPath('comp-1/cvs/a.pdf')).toBe(false);
+  });
+});
+
+describe('StorageService (real S3)', () => {
+  let service: StorageService;
+
+  beforeEach(async () => {
+    mockSend.mockClear();
+    mockSend.mockResolvedValue({});
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        StorageService,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: (key: string) => {
+              const values: Record<string, string> = {
+                'aws.accessKeyId': 'key',
+                'aws.secretAccessKey': 'secret',
+                'aws.s3Bucket': 'recdesk-cvs-dev',
+                'aws.region': 'eu-central-1',
+              };
+              return values[key];
+            },
+          },
+        },
+      ],
+    }).compile();
+
+    service = module.get(StorageService);
+    await service.onModuleInit();
+  });
+
+  it('encrypts uploads at rest with SSE-S3 (AES256)', async () => {
+    await service.uploadFile(
+      Buffer.from('id-scan'),
+      'national-id.pdf',
+      'application/pdf',
+      'comp-1',
+      'documents/req-1',
+    );
+
+    const putCall = mockSend.mock.calls.find(
+      (c) => c[0] instanceof PutObjectCommand,
+    );
+    expect(putCall).toBeTruthy();
+    expect(putCall![0].input.ServerSideEncryption).toBe('AES256');
   });
 });

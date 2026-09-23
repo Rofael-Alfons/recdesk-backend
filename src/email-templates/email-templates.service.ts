@@ -244,6 +244,30 @@ Best regards,
         type: EmailTemplateType.OFFER,
         isDefault: true,
       },
+      // Welcome template — sent automatically on the morning of the
+      // candidate's start date once they're marked HIRED
+      {
+        name: 'Welcome to the Team',
+        subject: "You're starting at {{company_name}} today!",
+        body: `Hi {{candidate_first_name}},
+
+Welcome to {{company_name}}! Today, {{start_date}}, marks the start of your journey with us as {{job_title}}, and we couldn't be more excited to have you on the team.
+
+Here's what to expect for your first day:
+- Arrive whenever your manager confirmed with you, ready to meet the team
+- Bring a valid ID for onboarding paperwork
+- Come with questions — we're here to help you settle in
+
+If anything comes up before then, just reply to this email and we'll sort it out.
+
+Welcome aboard!
+
+Best regards,
+{{sender_name}}
+{{company_name}}`,
+        type: EmailTemplateType.WELCOME,
+        isDefault: true,
+      },
     ];
 
     let created = 0;
@@ -307,6 +331,10 @@ Best regards,
       {
         token: '{{sender_name}}',
         description: 'Full name of the person sending the email',
+      },
+      {
+        token: '{{start_date}}',
+        description: "Candidate's onboarding start date",
       },
     ];
   }

@@ -23,7 +23,7 @@ import { BillingService } from '../billing/billing.service';
 describe('EmailSendingService', () => {
   let service: EmailSendingService;
   let prisma: any;
-  let templates: { findOne: jest.Mock };
+  let templates: { findOne: jest.Mock; findDefaultByType: jest.Mock };
   let templateEngine: { render: jest.Mock };
   let billing: { trackUsage: jest.Mock };
 
@@ -32,7 +32,7 @@ describe('EmailSendingService', () => {
 
   beforeEach(async () => {
     prisma = {
-      candidate: { findFirst: jest.fn(), findMany: jest.fn() },
+      candidate: { findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn().mockResolvedValue({}) },
       company: { findUnique: jest.fn() },
       user: { findUnique: jest.fn() },
       emailSent: { create: jest.fn().mockResolvedValue({}) },
@@ -44,6 +44,12 @@ describe('EmailSendingService', () => {
         name: 'Rejection',
         subject: 'Update for {{candidate_name}}',
         body: 'Hello {{candidate_name}}',
+      }),
+      findDefaultByType: jest.fn().mockResolvedValue({
+        id: 'tpl-welcome',
+        name: 'Welcome to the Team',
+        subject: 'Welcome {{candidate_name}}',
+        body: 'Hi {{candidate_name}}, you start {{start_date}}',
       }),
     };
     templateEngine = {
@@ -122,6 +128,67 @@ describe('EmailSendingService', () => {
       expect(result.success).toBe(true);
       expect(result.candidateEmail).toBe('jane@example.com');
       expect(prisma.emailSent.create).toHaveBeenCalled();
+      expect(billing.trackUsage).toHaveBeenCalledWith(companyId, 'EMAIL_SENT');
+    });
+  });
+
+  describe('sendWelcomeEmail', () => {
+    const candidate = {
+      id: 'c1',
+      fullName: 'Jane Doe',
+      email: 'jane@example.com',
+      startDate: new Date('2026-08-01T00:00:00.000Z'),
+      job: { title: 'Engineer' },
+    };
+
+    it('returns null when candidate is missing', async () => {
+      prisma.candidate.findFirst.mockResolvedValue(null);
+
+      const result = await service.sendWelcomeEmail('c1', companyId);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null when candidate has no startDate', async () => {
+      prisma.candidate.findFirst.mockResolvedValue({ ...candidate, startDate: null });
+
+      const result = await service.sendWelcomeEmail('c1', companyId);
+
+      expect(result).toBeNull();
+      expect(templates.findDefaultByType).not.toHaveBeenCalled();
+    });
+
+    it('returns null and skips sending when no default WELCOME template is configured', async () => {
+      prisma.candidate.findFirst.mockResolvedValue(candidate);
+      templates.findDefaultByType.mockResolvedValue(null);
+
+      const result = await service.sendWelcomeEmail('c1', companyId);
+
+      expect(result).toBeNull();
+      expect(prisma.emailSent.create).not.toHaveBeenCalled();
+    });
+
+    it('renders the welcome template, sends, and marks welcomeEmailSentAt with no acting user', async () => {
+      prisma.candidate.findFirst.mockResolvedValue(candidate);
+      prisma.company.findUnique.mockResolvedValue({ id: companyId, name: 'Acme' });
+
+      const result = await service.sendWelcomeEmail('c1', companyId);
+
+      expect(result?.success).toBe(true);
+      expect(prisma.emailSent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ candidateId: 'c1', sentById: null }),
+      });
+      expect(prisma.candidateAction.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          candidateId: 'c1',
+          userId: null,
+          action: 'welcome_email_sent',
+        }),
+      });
+      expect(prisma.candidate.update).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { welcomeEmailSentAt: expect.any(Date) },
+      });
       expect(billing.trackUsage).toHaveBeenCalledWith(companyId, 'EMAIL_SENT');
     });
   });

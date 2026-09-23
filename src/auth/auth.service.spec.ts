@@ -18,6 +18,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AllowlistService } from '../allowlist/allowlist.service';
 import { TransactionalEmailService } from '../email-sending/transactional-email.service';
 import { PermissionsService } from '../permissions/permissions.service';
+import { DocumentTemplatesService } from '../document-templates/document-templates.service';
 import { UserRole } from '@prisma/client';
 
 describe('AuthService', () => {
@@ -27,6 +28,7 @@ describe('AuthService', () => {
   let jwt: { sign: jest.Mock };
   let permissions: { getUserPermissions: jest.Mock };
   let transactionalEmail: { sendPasswordResetEmail: jest.Mock };
+  let documentTemplates: { createDefaultDocumentTemplates: jest.Mock };
 
   const passwordHash = bcrypt.hashSync('Password123!', 10);
   const company = {
@@ -107,6 +109,11 @@ describe('AuthService', () => {
         .fn()
         .mockResolvedValue({ success: true }),
     };
+    documentTemplates = {
+      createDefaultDocumentTemplates: jest
+        .fn()
+        .mockResolvedValue({ created: 3, skipped: 0 }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -128,6 +135,7 @@ describe('AuthService', () => {
         { provide: AllowlistService, useValue: allowlist },
         { provide: TransactionalEmailService, useValue: transactionalEmail },
         { provide: PermissionsService, useValue: permissions },
+        { provide: DocumentTemplatesService, useValue: documentTemplates },
       ],
     }).compile();
 

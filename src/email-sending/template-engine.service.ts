@@ -11,7 +11,9 @@ export interface PersonalizationContext {
   company: {
     name: string;
   };
-  sender: {
+  // Optional: automated sends (e.g. the welcome-email cron) have no acting
+  // user. render() falls back to the company name for {{sender_name}}.
+  sender?: {
     firstName: string;
     lastName: string;
   };
@@ -20,6 +22,7 @@ export interface PersonalizationContext {
     date?: string;
     time?: string;
   };
+  startDate?: string;
 }
 
 @Injectable()
@@ -34,10 +37,13 @@ export class TemplateEngineService {
       '{{candidate_email}}': context.candidate.email || '',
       '{{job_title}}': context.job?.title || 'the position',
       '{{company_name}}': context.company.name,
-      '{{sender_name}}': `${context.sender.firstName} ${context.sender.lastName}`,
+      '{{sender_name}}': context.sender
+        ? `${context.sender.firstName} ${context.sender.lastName}`
+        : context.company.name,
       '{{booking_link}}': context.interview?.bookingLink || '',
       '{{interview_date}}': context.interview?.date || '',
       '{{interview_time}}': context.interview?.time || '',
+      '{{start_date}}': context.startDate || '',
     };
 
     let result = template;
@@ -76,6 +82,7 @@ export class TemplateEngineService {
         firstName: 'Jane',
         lastName: 'Doe',
       },
+      startDate: 'August 1, 2026',
     };
   }
 
@@ -105,6 +112,7 @@ export class TemplateEngineService {
       '{{booking_link}}',
       '{{interview_date}}',
       '{{interview_time}}',
+      '{{start_date}}',
     ];
 
     const usedTokens = this.extractTokens(template);

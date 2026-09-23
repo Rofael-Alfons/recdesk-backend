@@ -190,6 +190,18 @@ export class CandidatesController {
     return this.candidatesService.rescoreForJob(id, dto, user.companyId);
   }
 
+  @Get(':id/scores/:jobId/history')
+  @ApiOperation({ summary: 'Get rescore history for a candidate on a job' })
+  @ApiResponse({ status: 200, description: 'Score history retrieved' })
+  @ApiResponse({ status: 404, description: 'Candidate not found' })
+  async getScoreHistory(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.candidatesService.getScoreHistory(id, jobId, user.companyId);
+  }
+
   @Get(':id/cv-url')
   @ApiOperation({ summary: 'Get signed URL for candidate CV file' })
   @ApiResponse({
