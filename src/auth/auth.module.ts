@@ -10,6 +10,7 @@ import { MicrosoftStrategy } from './strategies/microsoft.strategy';
 import { EmailSendingModule } from '../email-sending/email-sending.module';
 import { AllowlistModule } from '../allowlist/allowlist.module';
 import { PermissionsModule } from '../permissions/permissions.module';
+import { DocumentTemplatesModule } from '../document-templates/document-templates.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { PermissionsModule } from '../permissions/permissions.module';
     EmailSendingModule,
     AllowlistModule,
     PermissionsModule,
+    DocumentTemplatesModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, GoogleStrategy, MicrosoftStrategy],

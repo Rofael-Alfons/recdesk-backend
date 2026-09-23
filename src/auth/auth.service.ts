@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AllowlistService } from '../allowlist/allowlist.service';
 import { TransactionalEmailService } from '../email-sending/transactional-email.service';
 import { PermissionsService } from '../permissions/permissions.service';
+import { DocumentTemplatesService } from '../document-templates/document-templates.service';
 import { UserRole } from '@prisma/client';
 
 // Shown when an email is not on the access allowlist. Kept as a stable string
@@ -53,6 +54,7 @@ export class AuthService {
     private allowlistService: AllowlistService,
     private transactionalEmailService: TransactionalEmailService,
     private permissionsService: PermissionsService,
+    private documentTemplatesService: DocumentTemplatesService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -101,6 +103,10 @@ export class AuthService {
 
       return user;
     });
+
+    await this.documentTemplatesService.createDefaultDocumentTemplates(
+      result.companyId,
+    );
 
     // Generate tokens
     const tokens = await this.generateTokens(result);
@@ -676,6 +682,10 @@ export class AuthService {
 
       return newUser;
     });
+
+    await this.documentTemplatesService.createDefaultDocumentTemplates(
+      result.companyId,
+    );
 
     return {
       id: result.id,

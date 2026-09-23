@@ -21,6 +21,8 @@ import { Prisma } from '@prisma/client';
 import { QueueService } from '../queue/queue.service';
 import { AiService, ParsedCVData } from '../ai/ai.service';
 import { StorageService } from '../storage/storage.service';
+import { PHOTO_SIGNED_URL_TTL_SECONDS } from '../document-requests/document-requests.constants';
+import { recordCandidateScoreHistory } from '../common/candidate-score-history.util';
 
 @Injectable()
 export class CandidatesService {
@@ -236,6 +238,9 @@ export class CandidatesService {
         ...(dto.status && { status: dto.status }),
         ...(dto.jobId !== undefined && { jobId: dto.jobId }),
         ...(dto.tags && { tags: dto.tags }),
+        ...(dto.startDate !== undefined && {
+          startDate: dto.startDate ? new Date(dto.startDate) : null,
+        }),
       },
       include: {
         job: { select: { id: true, title: true } },
@@ -585,6 +590,20 @@ export class CandidatesService {
       },
     });
 
+    await recordCandidateScoreHistory(this.prisma, {
+      candidateId,
+      jobId: dto.jobId,
+      overallScore: scoreResult.overallScore,
+      skillsMatchScore: scoreResult.skillsMatchScore,
+      experienceScore: scoreResult.experienceScore,
+      educationScore: scoreResult.educationScore,
+      growthScore: scoreResult.growthScore,
+      bonusScore: scoreResult.bonusScore,
+      scoreExplanation: scoreResult.scoreExplanation || undefined,
+      recommendation: scoreResult.recommendation,
+      source: 'manual_rescore_sync',
+    });
+
     // Update overall score on candidate if this is their assigned job
     if (candidate.jobId === dto.jobId) {
       await this.prisma.candidate.update({
@@ -603,6 +622,20 @@ export class CandidatesService {
       jobTitle: job.title,
       score: scoreResult.overallScore,
     };
+  }
+
+  async getScoreHistory(candidateId: string, jobId: string, companyId: string) {
+    const candidate = await this.prisma.candidate.findFirst({
+      where: { id: candidateId, companyId },
+    });
+    if (!candidate) {
+      throw new NotFoundException('Candidate not found');
+    }
+
+    return this.prisma.candidateScoreHistory.findMany({
+      where: { candidateId, jobId },
+      orderBy: { scoredAt: 'desc' },
+    });
   }
 
   /**
@@ -632,6 +665,24 @@ export class CandidatesService {
       }
     }
 
+    // Unlike the CV, always signed when present (in list rows too): getSignedUrl
+    // is a local HMAC computation, not a network call, so it's cheap even for
+    // every row of a paginated list — and the avatar needs to render there.
+    let photoSignedUrl: string | null = null;
+    if (candidate.photoUrl) {
+      try {
+        photoSignedUrl = await this.storageService.getSignedUrl(
+          candidate.photoUrl,
+          PHOTO_SIGNED_URL_TTL_SECONDS,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Failed to generate photo signed URL for candidate ${candidate.id}: ${error}`,
+        );
+        photoSignedUrl = candidate.photoUrl;
+      }
+    }
+
     return {
       id: candidate.id,
       fullName: candidate.fullName,
@@ -646,10 +697,15 @@ export class CandidatesService {
       cvFileUrl: candidate.cvFileUrl,
       cvFileSignedUrl, // Presigned URL for secure access
       cvFileName: candidate.cvFileName,
+      photoUrl: candidate.photoUrl,
+      photoSignedUrl,
+      photoFileName: candidate.photoFileName,
       overallScore: candidate.overallScore,
       aiSummary: candidate.aiSummary,
       tags: candidate.tags,
       job: candidate.job,
+      startDate: candidate.startDate,
+      welcomeEmailSentAt: candidate.welcomeEmailSentAt,
       createdAt: candidate.createdAt,
       updatedAt: candidate.updatedAt,
       // Parsed CV data fields

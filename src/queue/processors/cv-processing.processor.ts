@@ -15,6 +15,7 @@ import { BillingService } from '../../billing/billing.service';
 import { QUEUE_NAMES } from '../queue.constants';
 import type { CvProcessingJobData } from '../queue.service';
 import { NotificationType, UsageType } from '@prisma/client';
+import { recordCandidateScoreHistory } from '../../common/candidate-score-history.util';
 
 @Processor(QUEUE_NAMES.CV_PROCESSING)
 export class CvProcessingProcessor {
@@ -188,6 +189,20 @@ export class CvProcessingProcessor {
         scoreExplanation: scoreResult.scoreExplanation || undefined,
         recommendation: scoreResult.recommendation,
       },
+    });
+
+    await recordCandidateScoreHistory(this.prisma, {
+      candidateId,
+      jobId,
+      overallScore: scoreResult.overallScore,
+      skillsMatchScore: scoreResult.skillsMatchScore,
+      experienceScore: scoreResult.experienceScore,
+      educationScore: scoreResult.educationScore,
+      growthScore: scoreResult.growthScore,
+      bonusScore: scoreResult.bonusScore,
+      scoreExplanation: scoreResult.scoreExplanation || undefined,
+      recommendation: scoreResult.recommendation,
+      source: 'cv_processing',
     });
 
     // Update overall score on candidate (aiSummary is set during initial parsing, not overwritten here)

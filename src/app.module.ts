@@ -12,6 +12,9 @@ import { UsersModule } from './users/users.module';
 import { JobsModule } from './jobs/jobs.module';
 import { CandidatesModule } from './candidates/candidates.module';
 import { InterviewsModule } from './interviews/interviews.module';
+import { InterviewEvaluationsModule } from './interview-evaluations/interview-evaluations.module';
+import { DocumentRequestsModule } from './document-requests/document-requests.module';
+import { DocumentTemplatesModule } from './document-templates/document-templates.module';
 import { AvailabilityModule } from './availability/availability.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { AiModule } from './ai/ai.module';
@@ -93,6 +96,9 @@ import configuration from './config/configuration';
     JobsModule,
     CandidatesModule,
     InterviewsModule,
+    InterviewEvaluationsModule,
+    DocumentRequestsModule,
+    DocumentTemplatesModule,
     AvailabilityModule,
     IntegrationsModule,
     AiModule,

@@ -13,6 +13,7 @@ export enum EmailTemplateType {
   INTERVIEW_INVITE = 'INTERVIEW_INVITE',
   OFFER = 'OFFER',
   FOLLOW_UP = 'FOLLOW_UP',
+  WELCOME = 'WELCOME',
   CUSTOM = 'CUSTOM',
 }
 

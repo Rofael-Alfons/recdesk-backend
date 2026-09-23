@@ -41,6 +41,7 @@ describe('CandidatesService', () => {
       candidateNote: { create: jest.fn() },
       candidateAction: { createMany: jest.fn() },
       candidateScore: { upsert: jest.fn() },
+      candidateScoreHistory: { create: jest.fn(), findMany: jest.fn() },
       $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     };
     aiService = {
@@ -128,6 +129,78 @@ describe('CandidatesService', () => {
     });
   });
 
+  describe('update', () => {
+    it('persists startDate when provided', async () => {
+      prisma.candidate.findFirst.mockResolvedValue({
+        id: 'c1',
+        companyId,
+        email: 'jane@example.com',
+      });
+      prisma.candidate.update.mockResolvedValue({
+        id: 'c1',
+        fullName: 'Jane Doe',
+        tags: [],
+        startDate: new Date('2026-08-01T00:00:00.000Z'),
+      });
+
+      await service.update(
+        'c1',
+        { status: 'HIRED' as any, startDate: '2026-08-01' },
+        companyId,
+      );
+
+      expect(prisma.candidate.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c1' },
+          data: expect.objectContaining({
+            status: 'HIRED',
+            startDate: new Date('2026-08-01'),
+          }),
+        }),
+      );
+    });
+
+    it('clears startDate when explicitly set to null', async () => {
+      prisma.candidate.findFirst.mockResolvedValue({
+        id: 'c1',
+        companyId,
+        email: 'jane@example.com',
+      });
+      prisma.candidate.update.mockResolvedValue({
+        id: 'c1',
+        fullName: 'Jane Doe',
+        tags: [],
+        startDate: null,
+      });
+
+      await service.update('c1', { startDate: null as any }, companyId);
+
+      expect(prisma.candidate.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ startDate: null }),
+        }),
+      );
+    });
+
+    it('omits startDate from the update payload when not provided', async () => {
+      prisma.candidate.findFirst.mockResolvedValue({
+        id: 'c1',
+        companyId,
+        email: 'jane@example.com',
+      });
+      prisma.candidate.update.mockResolvedValue({
+        id: 'c1',
+        fullName: 'Jane Doe',
+        tags: [],
+      });
+
+      await service.update('c1', { status: 'SCREENING' as any }, companyId);
+
+      const call = prisma.candidate.update.mock.calls[0][0];
+      expect(call.data).not.toHaveProperty('startDate');
+    });
+  });
+
   describe('findOne', () => {
     it('throws NotFoundException when candidate missing', async () => {
       prisma.candidate.findFirst.mockResolvedValue(null);
@@ -166,6 +239,134 @@ describe('CandidatesService', () => {
 
       expect(result.cvFileSignedUrl).toBe('https://signed-url');
       expect(storageService.getSignedUrl).toHaveBeenCalled();
+    });
+
+    it('generates photoSignedUrl in detail view when photoUrl is set', async () => {
+      prisma.candidate.findFirst.mockResolvedValue({
+        id: 'c1',
+        fullName: 'Jane',
+        email: 'jane@example.com',
+        phone: null,
+        location: null,
+        linkedinUrl: null,
+        githubUrl: null,
+        portfolioUrl: null,
+        source: 'UPLOAD',
+        status: 'NEW',
+        cvFileUrl: 's3://bucket/cv.pdf',
+        cvFileName: 'cv.pdf',
+        photoUrl: 's3://bucket/photo.jpg',
+        photoFileName: 'photo.jpg',
+        overallScore: 80,
+        aiSummary: null,
+        tags: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        job: null,
+        scores: [],
+        notes: [],
+        stageHistory: [],
+      });
+
+      const result = await service.findOne('c1', companyId);
+
+      expect(result.photoSignedUrl).toBe('https://signed-url');
+      expect(storageService.getSignedUrl).toHaveBeenCalledWith(
+        's3://bucket/photo.jpg',
+        24 * 60 * 60,
+      );
+    });
+
+    it('omits photoSignedUrl when photoUrl is not set', async () => {
+      prisma.candidate.findFirst.mockResolvedValue({
+        id: 'c1',
+        fullName: 'Jane',
+        email: 'jane@example.com',
+        phone: null,
+        location: null,
+        linkedinUrl: null,
+        githubUrl: null,
+        portfolioUrl: null,
+        source: 'UPLOAD',
+        status: 'NEW',
+        cvFileUrl: 's3://bucket/cv.pdf',
+        cvFileName: 'cv.pdf',
+        photoUrl: null,
+        overallScore: 80,
+        aiSummary: null,
+        tags: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        job: null,
+        scores: [],
+        notes: [],
+        stageHistory: [],
+      });
+
+      const result = await service.findOne('c1', companyId);
+
+      expect(result.photoSignedUrl).toBeNull();
+    });
+
+    it('falls back to the raw photoUrl when signing fails', async () => {
+      storageService.getSignedUrl.mockImplementation((key: string) => {
+        if (key === 's3://bucket/photo.jpg') throw new Error('boom');
+        return Promise.resolve('https://signed-url');
+      });
+      prisma.candidate.findFirst.mockResolvedValue({
+        id: 'c1',
+        fullName: 'Jane',
+        email: 'jane@example.com',
+        phone: null,
+        location: null,
+        linkedinUrl: null,
+        githubUrl: null,
+        portfolioUrl: null,
+        source: 'UPLOAD',
+        status: 'NEW',
+        cvFileUrl: 's3://bucket/cv.pdf',
+        cvFileName: 'cv.pdf',
+        photoUrl: 's3://bucket/photo.jpg',
+        overallScore: 80,
+        aiSummary: null,
+        tags: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        job: null,
+        scores: [],
+        notes: [],
+        stageHistory: [],
+      });
+
+      const result = await service.findOne('c1', companyId);
+
+      expect(result.photoSignedUrl).toBe('s3://bucket/photo.jpg');
+    });
+  });
+
+  describe('findAll', () => {
+    it('generates photoSignedUrl for list rows even though includeSignedUrl is false', async () => {
+      prisma.candidate.findMany.mockResolvedValue([
+        {
+          id: 'c1',
+          fullName: 'Jane',
+          email: 'jane@example.com',
+          source: 'UPLOAD',
+          status: 'NEW',
+          cvFileUrl: 's3://bucket/cv.pdf',
+          photoUrl: 's3://bucket/photo.jpg',
+          tags: [],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          job: null,
+        },
+      ]);
+      prisma.candidate.count.mockResolvedValue(1);
+
+      const result = await service.findAll(companyId, {});
+
+      expect(result.data[0].photoSignedUrl).toBe('https://signed-url');
+      expect(result.data[0].cvFileSignedUrl).toBeNull();
     });
   });
 
@@ -276,6 +477,76 @@ describe('CandidatesService', () => {
       await expect(
         service.rescoreForJob('c1', { jobId: 'job-1' }, companyId),
       ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('records a score history row on synchronous scoring (no queue available)', async () => {
+      (service as any).queueService = undefined;
+
+      prisma.candidate.findFirst.mockResolvedValue({
+        id: 'c1',
+        companyId,
+        jobId: 'other-job',
+        fullName: 'Jane',
+        email: 'jane@example.com',
+        phone: null,
+        location: null,
+        linkedinUrl: null,
+        githubUrl: null,
+        portfolioUrl: null,
+        education: [],
+        experience: [],
+        skills: [],
+        projects: [],
+        certifications: [],
+        languages: [],
+      });
+      prisma.job.findFirst.mockResolvedValue({
+        id: 'job-1',
+        title: 'Engineer',
+        status: 'ACTIVE',
+        description: null,
+        requiredSkills: [],
+        preferredSkills: [],
+        experienceLevel: 'MID',
+        requirements: {},
+      });
+
+      await service.rescoreForJob('c1', { jobId: 'job-1' }, companyId);
+
+      expect(prisma.candidateScore.upsert).toHaveBeenCalled();
+      expect(prisma.candidateScoreHistory.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          candidateId: 'c1',
+          jobId: 'job-1',
+          overallScore: 80,
+          source: 'manual_rescore_sync',
+        }),
+      });
+    });
+  });
+
+  describe('getScoreHistory', () => {
+    it('throws NotFoundException when candidate is not in the caller company', async () => {
+      prisma.candidate.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getScoreHistory('c1', 'job-1', companyId),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.candidateScoreHistory.findMany).not.toHaveBeenCalled();
+    });
+
+    it('returns rescore history for the candidate+job, newest first', async () => {
+      prisma.candidate.findFirst.mockResolvedValue({ id: 'c1', companyId });
+      const history = [{ id: 'hist-2' }, { id: 'hist-1' }];
+      prisma.candidateScoreHistory.findMany.mockResolvedValue(history);
+
+      const result = await service.getScoreHistory('c1', 'job-1', companyId);
+
+      expect(prisma.candidateScoreHistory.findMany).toHaveBeenCalledWith({
+        where: { candidateId: 'c1', jobId: 'job-1' },
+        orderBy: { scoredAt: 'desc' },
+      });
+      expect(result).toEqual(history);
     });
   });
 

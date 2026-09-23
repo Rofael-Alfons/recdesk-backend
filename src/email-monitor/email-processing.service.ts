@@ -11,6 +11,7 @@ import { StorageService } from '../storage/storage.service';
 import { EmailPrefilterService, EmailData } from './email-prefilter.service';
 import * as path from 'path';
 import { NotificationType, UsageType } from '@prisma/client';
+import { recordCandidateScoreHistory } from '../common/candidate-score-history.util';
 
 /**
  * Provider-agnostic email structure, normalized from Gmail or Outlook messages.
@@ -593,6 +594,20 @@ export class EmailProcessingService {
           recommendation: scoreResult.recommendation,
           scoreExplanation: scoreResult.scoreExplanation,
         },
+      });
+
+      await recordCandidateScoreHistory(this.prisma, {
+        candidateId,
+        jobId,
+        overallScore: scoreResult.overallScore,
+        skillsMatchScore: scoreResult.skillsMatchScore,
+        experienceScore: scoreResult.experienceScore,
+        educationScore: scoreResult.educationScore,
+        growthScore: scoreResult.growthScore,
+        bonusScore: scoreResult.bonusScore,
+        scoreExplanation: scoreResult.scoreExplanation,
+        recommendation: scoreResult.recommendation,
+        source: 'email_ingest',
       });
 
       await this.prisma.candidate.update({
