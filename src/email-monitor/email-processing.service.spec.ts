@@ -157,7 +157,14 @@ describe('EmailProcessingService', () => {
         data: expect.objectContaining({ status: 'PENDING' }),
       }),
     );
-    expect(prisma.candidate.create).toHaveBeenCalled();
+    expect(prisma.candidate.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          source: 'EMAIL',
+          sourceChannel: 'EMAIL_INBOX',
+        }),
+      }),
+    );
   });
 
   it('skips emails sent by the connected account', async () => {
@@ -288,7 +295,14 @@ describe('EmailProcessingService', () => {
 
       expect(created).toBe(true);
       expect(aiService.parseCV).toHaveBeenCalled();
-      expect(prisma.candidate.create).toHaveBeenCalled();
+      expect(prisma.candidate.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            source: 'EMAIL',
+            sourceChannel: 'EMAIL_INBOX',
+          }),
+        }),
+      );
     });
   });
 

@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole, CompanyMode, PlanType, JobStatus, ExperienceLevel, CandidateSource, CandidateStatus, EmailTemplateType } from '@prisma/client';
+import { PrismaClient, UserRole, CompanyMode, PlanType, JobStatus, ExperienceLevel, CandidateSource, CandidateSourceChannel, CandidateStatus, EmailTemplateType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -199,6 +199,7 @@ async function main() {
         linkedinUrl: 'https://linkedin.com/in/omarkhaled',
         githubUrl: 'https://github.com/omarkhaled',
         source: CandidateSource.EMAIL,
+        sourceChannel: CandidateSourceChannel.EMAIL_INBOX,
         status: CandidateStatus.SCREENING,
         cvFileUrl: 'https://s3.amazonaws.com/recdesk/cvs/omar-khaled-cv.pdf',
         cvFileName: 'omar-khaled-cv.pdf',
@@ -230,6 +231,7 @@ async function main() {
         linkedinUrl: 'https://linkedin.com/in/laylaahmed',
         portfolioUrl: 'https://layla-portfolio.vercel.app',
         source: CandidateSource.UPLOAD,
+        sourceChannel: CandidateSourceChannel.BULK_UPLOAD,
         status: CandidateStatus.NEW,
         cvFileUrl: 'https://s3.amazonaws.com/recdesk/cvs/layla-ahmed-cv.pdf',
         cvFileName: 'layla-ahmed-cv.pdf',
@@ -261,6 +263,7 @@ async function main() {
         phone: '+201234567890',
         location: 'Giza, Egypt',
         source: CandidateSource.JOB_BOARD,
+        sourceChannel: CandidateSourceChannel.OTHER,
         status: CandidateStatus.NEW,
         cvFileUrl: 'https://s3.amazonaws.com/recdesk/cvs/youssef-mahmoud-cv.pdf',
         cvFileName: 'youssef-mahmoud-cv.pdf',
@@ -290,6 +293,7 @@ async function main() {
         location: 'Cairo, Egypt',
         linkedinUrl: 'https://linkedin.com/in/mariamfarouk',
         source: CandidateSource.REFERRAL,
+        sourceChannel: CandidateSourceChannel.REFERRAL,
         status: CandidateStatus.SHORTLISTED,
         cvFileUrl: 'https://s3.amazonaws.com/recdesk/cvs/mariam-farouk-cv.pdf',
         cvFileName: 'mariam-farouk-cv.pdf',
@@ -323,6 +327,7 @@ async function main() {
         phone: '+201187654321',
         location: 'Mansoura, Egypt',
         source: CandidateSource.UPLOAD,
+        sourceChannel: CandidateSourceChannel.BULK_UPLOAD,
         status: CandidateStatus.NEW,
         cvFileUrl: 'https://s3.amazonaws.com/recdesk/cvs/karim-nabil-cv.pdf',
         cvFileName: 'karim-nabil-cv.pdf',

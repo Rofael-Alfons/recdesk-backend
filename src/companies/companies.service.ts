@@ -45,6 +45,7 @@ export class CompaniesService {
       domain: company.domain,
       mode: company.mode,
       plan: company.plan,
+      collectGenderData: company.collectGenderData,
       createdAt: company.createdAt,
       updatedAt: company.updatedAt,
       stats: {
@@ -97,6 +98,10 @@ export class CompaniesService {
         ...(dto.domain && { domain: dto.domain.toLowerCase() }),
         ...(dto.mode && { mode: dto.mode }),
         ...(dto.plan && { plan: dto.plan }),
+        // Checked against undefined so the setting can be turned back off.
+        ...(dto.collectGenderData !== undefined && {
+          collectGenderData: dto.collectGenderData,
+        }),
       },
     });
 
@@ -106,6 +111,7 @@ export class CompaniesService {
       domain: company.domain,
       mode: company.mode,
       plan: company.plan,
+      collectGenderData: company.collectGenderData,
       createdAt: company.createdAt,
       updatedAt: company.updatedAt,
     };

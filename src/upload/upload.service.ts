@@ -5,16 +5,42 @@ import { FileProcessingService } from '../file-processing/file-processing.servic
 import { AiService } from '../ai/ai.service';
 import { BillingService } from '../billing/billing.service';
 import { StorageService } from '../storage/storage.service';
-import { UsageType } from '@prisma/client';
+import {
+  CandidateSource,
+  CandidateSourceChannel,
+  UsageType,
+} from '@prisma/client';
 import * as path from 'path';
 import { recordCandidateScoreHistory } from '../common/candidate-score-history.util';
+import { deriveCandidateFacets } from '../candidates/candidate-facets.util';
 
 export interface UploadResult {
   fileName: string;
   status: 'success' | 'failed' | 'processing';
   candidateId?: string;
   error?: string;
+  duplicate?: boolean;
 }
+
+/**
+ * How an uploaded CV is attributed. Bulk upload uses the defaults
+ * (UPLOAD / BULK_UPLOAD); referral submissions pass REFERRAL plus the
+ * referrer. Contact fields typed by the submitter override parsed values.
+ */
+export interface UploadAttribution {
+  source: CandidateSource;
+  sourceChannel: CandidateSourceChannel;
+  referredByUserId?: string;
+  referralCode?: string;
+  fullName?: string;
+  email?: string;
+  phone?: string;
+}
+
+const DEFAULT_ATTRIBUTION: UploadAttribution = {
+  source: 'UPLOAD',
+  sourceChannel: 'BULK_UPLOAD',
+};
 
 export interface BulkUploadResult {
   totalFiles: number;
@@ -89,18 +115,64 @@ export class UploadService {
     };
   }
 
+  /**
+   * Single-CV entry point for referral submissions. Runs the same pipeline
+   * as bulk upload (extraction, AI parsing, facets, usage, job scoring) with
+   * referral attribution applied. Caller is responsible for resolving the
+   * company and checking usage limits.
+   */
+  async uploadReferralCV(
+    file: Express.Multer.File,
+    companyId: string,
+    jobId: string | undefined,
+    attribution: UploadAttribution,
+  ): Promise<UploadResult> {
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+
+    if (jobId) {
+      const job = await this.prisma.job.findFirst({
+        where: { id: jobId, companyId },
+      });
+      if (!job) {
+        throw new BadRequestException('Job not found');
+      }
+    }
+
+    return this.processFile(file, companyId, jobId, attribution);
+  }
+
   private async processFile(
     file: Express.Multer.File,
     companyId: string,
     jobId?: string,
+    attribution: UploadAttribution = DEFAULT_ATTRIBUTION,
   ): Promise<UploadResult> {
     const fileName = file.originalname;
+    const providedEmail = attribution.email?.trim().toLowerCase() || undefined;
 
     try {
       // Validate file
       const validation = this.fileProcessingService.validateFile(file);
       if (!validation.valid) {
         return { fileName, status: 'failed', error: validation.error };
+      }
+
+      // A submitter-provided email is authoritative: reject duplicates before
+      // paying for storage, extraction, or AI parsing.
+      if (providedEmail) {
+        const existing = await this.prisma.candidate.findFirst({
+          where: { companyId, email: providedEmail },
+        });
+        if (existing) {
+          return {
+            fileName,
+            status: 'failed',
+            duplicate: true,
+            error: `Duplicate: candidate with email ${providedEmail} already exists`,
+          };
+        }
       }
 
       // Upload file to S3 (or local storage as fallback)
@@ -134,7 +206,9 @@ export class UploadService {
       // Cheap pre-check: if the raw CV text already reveals an email that
       // matches an existing candidate, skip the AI parse call entirely
       // instead of paying for it only to reject the result as a duplicate.
-      const emailHint = this.extractEmailHint(extraction.text);
+      const emailHint = providedEmail
+        ? null
+        : this.extractEmailHint(extraction.text);
       if (emailHint) {
         const existingByHint = await this.prisma.candidate.findFirst({
           where: { companyId, email: emailHint },
@@ -144,6 +218,7 @@ export class UploadService {
           return {
             fileName,
             status: 'failed',
+            duplicate: true,
             error: `Duplicate: candidate with email ${emailHint} already exists`,
           };
         }
@@ -167,8 +242,9 @@ export class UploadService {
         parsedData = this.extractBasicDataFromFilename(fileName);
       }
 
-      // Check for duplicate by email
-      if (parsedData.personalInfo?.email) {
+      // Check for duplicate by email (already done up front when the
+      // submitter provided one — that email is what gets stored)
+      if (!providedEmail && parsedData.personalInfo?.email) {
         const existing = await this.prisma.candidate.findFirst({
           where: {
             companyId,
@@ -180,6 +256,7 @@ export class UploadService {
           return {
             fileName,
             status: 'failed',
+            duplicate: true,
             error: `Duplicate: candidate with email ${parsedData.personalInfo.email} already exists`,
           };
         }
@@ -189,15 +266,22 @@ export class UploadService {
       const candidate = await this.prisma.candidate.create({
         data: {
           fullName:
+            attribution.fullName?.trim() ||
             parsedData.personalInfo?.fullName ||
             this.extractNameFromFilename(fileName),
-          email: parsedData.personalInfo?.email?.toLowerCase(),
-          phone: parsedData.personalInfo?.phone,
+          email: providedEmail ?? parsedData.personalInfo?.email?.toLowerCase(),
+          phone: attribution.phone?.trim() || parsedData.personalInfo?.phone,
           location: parsedData.personalInfo?.location,
+          country: parsedData.personalInfo?.country,
+          region: parsedData.personalInfo?.region,
+          city: parsedData.personalInfo?.city,
           linkedinUrl: parsedData.personalInfo?.linkedinUrl,
           githubUrl: parsedData.personalInfo?.githubUrl,
           portfolioUrl: parsedData.personalInfo?.portfolioUrl,
-          source: 'UPLOAD',
+          source: attribution.source,
+          sourceChannel: attribution.sourceChannel,
+          referredByUserId: attribution.referredByUserId,
+          referralCode: attribution.referralCode,
           status: 'NEW',
           cvFileUrl: uploadResult.url, // S3 URL or local path
           cvFileName: fileName,
@@ -209,6 +293,7 @@ export class UploadService {
           projects: parsedData.projects || [],
           certifications: parsedData.certifications || [],
           languages: parsedData.languages || [],
+          ...deriveCandidateFacets(parsedData),
           aiSummary,
           companyId,
           jobId,
@@ -260,6 +345,9 @@ export class UploadService {
           email: candidate.email,
           phone: candidate.phone,
           location: candidate.location,
+          country: candidate.country,
+          region: candidate.region,
+          city: candidate.city,
           linkedinUrl: candidate.linkedinUrl,
           githubUrl: candidate.githubUrl,
           portfolioUrl: candidate.portfolioUrl,

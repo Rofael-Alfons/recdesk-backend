@@ -19,6 +19,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EmailTemplatesService } from '../email-templates/email-templates.service';
 import { TemplateEngineService } from './template-engine.service';
 import { BillingService } from '../billing/billing.service';
+import { CandidateSelectionService } from '../candidates/selection/candidate-selection.service';
+import { ScheduledEmailsService } from './scheduled-emails.service';
 
 describe('EmailSendingService', () => {
   let service: EmailSendingService;
@@ -26,6 +28,8 @@ describe('EmailSendingService', () => {
   let templates: { findOne: jest.Mock; findDefaultByType: jest.Mock };
   let templateEngine: { render: jest.Mock };
   let billing: { trackUsage: jest.Mock };
+  let candidateSelection: { resolveIds: jest.Mock };
+  let scheduledEmails: { schedule: jest.Mock };
 
   const companyId = 'comp-1';
   const userId = 'user-1';
@@ -58,6 +62,14 @@ describe('EmailSendingService', () => {
       ),
     };
     billing = { trackUsage: jest.fn().mockResolvedValue(undefined) };
+    candidateSelection = {
+      resolveIds: jest.fn((_companyId: string, dto: any) =>
+        Promise.resolve(dto.candidateIds),
+      ),
+    };
+    scheduledEmails = {
+      schedule: jest.fn((rows: unknown[]) => Promise.resolve(rows.length)),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -70,6 +82,8 @@ describe('EmailSendingService', () => {
         { provide: EmailTemplatesService, useValue: templates },
         { provide: TemplateEngineService, useValue: templateEngine },
         { provide: BillingService, useValue: billing },
+        { provide: CandidateSelectionService, useValue: candidateSelection },
+        { provide: ScheduledEmailsService, useValue: scheduledEmails },
       ],
     }).compile();
 
@@ -205,6 +219,113 @@ describe('EmailSendingService', () => {
         ),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
+
+    it('resolves a filter selection through CandidateSelectionService', async () => {
+      candidateSelection.resolveIds.mockResolvedValue(['c1']);
+      prisma.candidate.findMany.mockResolvedValue([
+        { id: 'c1', fullName: 'Jane Doe', email: 'jane@example.com', job: null },
+      ]);
+      prisma.company.findUnique.mockResolvedValue({ id: companyId, name: 'Acme' });
+      prisma.user.findUnique.mockResolvedValue({ id: userId, firstName: 'R', lastName: 'R' });
+
+      const dto = { filter: 'status=NEW', templateId: 'tpl-1' };
+      const result = await service.bulkSendEmails(dto, userId, companyId);
+
+      expect(candidateSelection.resolveIds).toHaveBeenCalledWith(companyId, dto);
+      expect(prisma.candidate.findMany.mock.calls[0][0].where.id.in).toEqual(['c1']);
+      expect(result).toMatchObject({ total: 1, successful: 1, queued: 0 });
+    });
+
+    it('queues large selections as scheduled emails instead of sending inline', async () => {
+      const ids = Array.from({ length: 150 }, (_, i) => `c${i}`);
+      candidateSelection.resolveIds.mockResolvedValue(ids);
+      prisma.candidate.findMany.mockResolvedValue(
+        ids.slice(0, 140).map((id) => ({ id })),
+      );
+
+      const result = await service.bulkSendEmails(
+        { filter: 'status=NEW', templateId: 'tpl-1', subjectOverride: 'Hi' },
+        userId,
+        companyId,
+      );
+
+      expect(prisma.emailSent.create).not.toHaveBeenCalled();
+      const rows = scheduledEmails.schedule.mock.calls[0][0];
+      expect(rows).toHaveLength(140);
+      expect(rows[0]).toMatchObject({
+        companyId,
+        candidateId: 'c0',
+        templateId: 'tpl-1',
+        subjectOverride: 'Hi',
+        purpose: 'bulk',
+        createdById: userId,
+      });
+      expect(result).toEqual({
+        total: 150,
+        successful: 0,
+        failed: 10,
+        queued: 140,
+        results: [],
+      });
+    });
+  });
+
+  describe('sendTemplateToCandidate', () => {
+    it('sends as the company when there is no sender user', async () => {
+      prisma.candidate.findFirst.mockResolvedValue({
+        id: 'c1',
+        fullName: 'Jane Doe',
+        email: 'jane@example.com',
+        job: null,
+      });
+      prisma.company.findUnique.mockResolvedValue({ id: companyId, name: 'Acme' });
+
+      const result = await service.sendTemplateToCandidate({
+        candidateId: 'c1',
+        companyId,
+        templateId: 'tpl-1',
+        senderUserId: null,
+        actionDetails: { scheduledEmailId: 'se-1', purpose: 'rejection' },
+      });
+
+      expect(result.success).toBe(true);
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+      expect(templateEngine.render.mock.calls[0][1]).not.toHaveProperty('sender');
+      expect(prisma.emailSent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ candidateId: 'c1', sentById: null }),
+      });
+      expect(prisma.candidateAction.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: null,
+          action: 'email_sent',
+          details: expect.objectContaining({
+            templateId: 'tpl-1',
+            scheduledEmailId: 'se-1',
+            purpose: 'rejection',
+          }),
+        }),
+      });
+    });
+
+    it('404s when the sending user no longer exists', async () => {
+      prisma.candidate.findFirst.mockResolvedValue({
+        id: 'c1',
+        fullName: 'Jane Doe',
+        email: 'jane@example.com',
+        job: null,
+      });
+      prisma.company.findUnique.mockResolvedValue({ id: companyId, name: 'Acme' });
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.sendTemplateToCandidate({
+          candidateId: 'c1',
+          companyId,
+          templateId: 'tpl-1',
+          senderUserId: 'gone',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
   });
 
   describe('sendCustom', () => {
@@ -244,6 +365,8 @@ describe('EmailSendingService', () => {
           { provide: EmailTemplatesService, useValue: templates },
           { provide: TemplateEngineService, useValue: templateEngine },
           { provide: BillingService, useValue: billing },
+          { provide: CandidateSelectionService, useValue: candidateSelection },
+          { provide: ScheduledEmailsService, useValue: scheduledEmails },
         ],
       }).compile();
 

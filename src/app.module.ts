@@ -13,6 +13,8 @@ import { JobsModule } from './jobs/jobs.module';
 import { CandidatesModule } from './candidates/candidates.module';
 import { InterviewsModule } from './interviews/interviews.module';
 import { InterviewEvaluationsModule } from './interview-evaluations/interview-evaluations.module';
+import { InterviewFeedbackModule } from './interview-feedback/interview-feedback.module';
+import { PipelineTemplatesModule } from './pipeline-templates/pipeline-templates.module';
 import { DocumentRequestsModule } from './document-requests/document-requests.module';
 import { DocumentTemplatesModule } from './document-templates/document-templates.module';
 import { AvailabilityModule } from './availability/availability.module';
@@ -23,6 +25,8 @@ import { UploadModule } from './upload/upload.module';
 import { QueueModule } from './queue/queue.module';
 import { EmailMonitorModule } from './email-monitor/email-monitor.module';
 import { BillingModule } from './billing/billing.module';
+import { ReportsModule } from './reports/reports.module';
+import { ReferralsModule } from './referrals/referrals.module';
 import { EmailTemplatesModule } from './email-templates/email-templates.module';
 import { EmailSendingModule } from './email-sending/email-sending.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -97,6 +101,8 @@ import configuration from './config/configuration';
     CandidatesModule,
     InterviewsModule,
     InterviewEvaluationsModule,
+    InterviewFeedbackModule,
+    PipelineTemplatesModule,
     DocumentRequestsModule,
     DocumentTemplatesModule,
     AvailabilityModule,
@@ -106,6 +112,8 @@ import configuration from './config/configuration';
     UploadModule,
     EmailMonitorModule,
     BillingModule,
+    ReportsModule,
+    ReferralsModule,
     EmailTemplatesModule,
     EmailSendingModule,
     NotificationsModule,

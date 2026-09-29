@@ -7,8 +7,13 @@ import {
   IsObject,
   MinLength,
   MaxLength,
+  ArrayMaxSize,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { JobStatus, ExperienceLevel } from '@prisma/client';
+import { PipelineStageInputDto } from '../../common/dto/pipeline-stage-input.dto';
+import { MAX_PIPELINE_STAGES } from '../../common/pipeline-stage.util';
 
 export class CreateJobDto {
   @ApiProperty({ example: 'Senior Backend Developer' })
@@ -67,4 +72,36 @@ export class CreateJobDto {
   @IsOptional()
   @IsObject()
   requirements?: Record<string, any>;
+
+  @ApiPropertyOptional({
+    description:
+      'Pipeline template to seed stages from ("standard" = built-in). Ignored when `stages` is given.',
+  })
+  @IsOptional()
+  @IsString()
+  templateId?: string;
+
+  @ApiPropertyOptional({
+    type: [PipelineStageInputDto],
+    description: 'Explicit pipeline stages, in order (overrides templateId)',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_PIPELINE_STAGES)
+  @ValidateNested({ each: true })
+  @Type(() => PipelineStageInputDto)
+  stages?: PipelineStageInputDto[];
+}
+
+export class ReplaceJobStagesDto {
+  @ApiProperty({
+    type: [PipelineStageInputDto],
+    description:
+      'The full pipeline in order. Existing stages keep their `id`; stages left out are deleted (only if unused).',
+  })
+  @IsArray()
+  @ArrayMaxSize(MAX_PIPELINE_STAGES)
+  @ValidateNested({ each: true })
+  @Type(() => PipelineStageInputDto)
+  stages: PipelineStageInputDto[];
 }

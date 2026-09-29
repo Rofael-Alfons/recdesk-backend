@@ -16,6 +16,7 @@ import { QUEUE_NAMES } from '../queue.constants';
 import type { CvProcessingJobData } from '../queue.service';
 import { NotificationType, UsageType } from '@prisma/client';
 import { recordCandidateScoreHistory } from '../../common/candidate-score-history.util';
+import { deriveCandidateFacets } from '../../candidates/candidate-facets.util';
 
 @Processor(QUEUE_NAMES.CV_PROCESSING)
 export class CvProcessingProcessor {
@@ -88,6 +89,9 @@ export class CvProcessingProcessor {
             email: parsed.personalInfo?.email || candidate.email,
             phone: parsed.personalInfo?.phone || candidate.phone,
             location: parsed.personalInfo?.location || candidate.location,
+            country: parsed.personalInfo?.country || candidate.country,
+            region: parsed.personalInfo?.region || candidate.region,
+            city: parsed.personalInfo?.city || candidate.city,
             linkedinUrl:
               parsed.personalInfo?.linkedinUrl || candidate.linkedinUrl,
             githubUrl: parsed.personalInfo?.githubUrl || candidate.githubUrl,
@@ -97,6 +101,16 @@ export class CvProcessingProcessor {
             projects: parsed.projects || undefined,
             certifications: parsed.certifications || undefined,
             languages: parsed.languages || undefined,
+            ...deriveCandidateFacets({
+              skills: parsed.skills || candidate.skills,
+              experience: parsed.experience || candidate.experience,
+              education: parsed.education || candidate.education,
+              languages: parsed.languages || candidate.languages,
+              totalExperienceYears:
+                parsed.totalExperienceYears ?? candidate.totalExperienceYears,
+              highestEducationLevel:
+                parsed.highestEducationLevel ?? candidate.educationLevel,
+            }),
             aiSummary: parsed.summary || undefined,
           },
         });

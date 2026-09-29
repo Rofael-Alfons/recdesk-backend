@@ -229,4 +229,114 @@ describe('UploadService', () => {
       );
     });
   });
+
+  describe('attribution', () => {
+    it('keeps bulk-upload defaults when no attribution is given', async () => {
+      await service.uploadBulkCVs([makeFile('jane-doe.pdf')], companyId);
+
+      const data = prisma.candidate.create.mock.calls[0][0].data;
+      expect(data.source).toBe('UPLOAD');
+      expect(data.sourceChannel).toBe('BULK_UPLOAD');
+      expect(data.referredByUserId).toBeUndefined();
+      expect(data.referralCode).toBeUndefined();
+    });
+  });
+
+  describe('uploadReferralCV', () => {
+    const referral = {
+      source: 'REFERRAL' as const,
+      sourceChannel: 'REFERRAL' as const,
+      referredByUserId: 'user-1',
+      referralCode: 'abc123',
+      fullName: '  Janet Referred ',
+      email: 'Janet@Example.com',
+      phone: '+20100',
+    };
+
+    it('applies referral attribution and submitter contact overrides', async () => {
+      const result = await service.uploadReferralCV(
+        makeFile('cv.pdf'),
+        companyId,
+        undefined,
+        referral,
+      );
+
+      expect(result.status).toBe('success');
+      const data = prisma.candidate.create.mock.calls[0][0].data;
+      expect(data).toMatchObject({
+        source: 'REFERRAL',
+        sourceChannel: 'REFERRAL',
+        referredByUserId: 'user-1',
+        referralCode: 'abc123',
+        fullName: 'Janet Referred',
+        email: 'janet@example.com',
+        phone: '+20100',
+        companyId,
+      });
+    });
+
+    it('rejects a duplicate submitted email before storing the file or calling AI', async () => {
+      prisma.candidate.findFirst.mockResolvedValue({ id: 'existing' });
+
+      const result = await service.uploadReferralCV(
+        makeFile('cv.pdf'),
+        companyId,
+        undefined,
+        referral,
+      );
+
+      expect(result).toMatchObject({ status: 'failed', duplicate: true });
+      expect(prisma.candidate.findFirst).toHaveBeenCalledWith({
+        where: { companyId, email: 'janet@example.com' },
+      });
+      expect(storageService.uploadFile).not.toHaveBeenCalled();
+      expect(aiService.parseCV).not.toHaveBeenCalled();
+      expect(prisma.candidate.create).not.toHaveBeenCalled();
+    });
+
+    it('does not reject on the CV email when the submitter gave a different one', async () => {
+      // Only the submitted email is checked; the CV's own email is ignored.
+      prisma.candidate.findFirst.mockImplementation(({ where }: any) =>
+        Promise.resolve(where.email === 'jane@example.com' ? { id: 'x' } : null),
+      );
+
+      const result = await service.uploadReferralCV(
+        makeFile('cv.pdf'),
+        companyId,
+        undefined,
+        referral,
+      );
+
+      expect(result.status).toBe('success');
+    });
+
+    it('assigns the job and scores the candidate', async () => {
+      prisma.job.findFirst.mockResolvedValue({ id: 'job-1', companyId });
+      prisma.job.findUnique = jest.fn().mockResolvedValue({
+        id: 'job-1',
+        title: 'Engineer',
+        description: null,
+        requiredSkills: [],
+        preferredSkills: [],
+        experienceLevel: 'JUNIOR',
+        requirements: {},
+      });
+      prisma.candidate.findUnique.mockResolvedValue({ id: 'c1', aiSummary: null });
+      prisma.candidateScoreHistory = { create: jest.fn() };
+      prisma.candidate.update = jest.fn();
+
+      await service.uploadReferralCV(makeFile('cv.pdf'), companyId, 'job-1', referral);
+
+      expect(prisma.candidate.create.mock.calls[0][0].data.jobId).toBe('job-1');
+      expect(aiService.scoreCandidate).toHaveBeenCalled();
+    });
+
+    it('rejects a job from another company', async () => {
+      prisma.job.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.uploadReferralCV(makeFile('cv.pdf'), companyId, 'job-x', referral),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
 });

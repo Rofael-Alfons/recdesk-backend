@@ -12,6 +12,7 @@ import { EmailPrefilterService, EmailData } from './email-prefilter.service';
 import * as path from 'path';
 import { NotificationType, UsageType } from '@prisma/client';
 import { recordCandidateScoreHistory } from '../common/candidate-score-history.util';
+import { deriveCandidateFacets } from '../candidates/candidate-facets.util';
 
 /**
  * Provider-agnostic email structure, normalized from Gmail or Outlook messages.
@@ -266,6 +267,7 @@ export class EmailProcessingService {
                 emailImport,
                 connection.companyId,
                 classification.detectedPosition,
+                connection.email,
               )
             : await this.createCandidateFromEmail(
                 emailImport,
@@ -273,6 +275,7 @@ export class EmailProcessingService {
                 email.senderEmail,
                 email.senderName,
                 { detectedPosition: classification.detectedPosition },
+                connection.email,
               );
 
         if (!created) {
@@ -348,6 +351,7 @@ export class EmailProcessingService {
     emailImport: any,
     companyId: string,
     detectedPosition?: string | null,
+    inboxEmail?: string,
   ): Promise<boolean> {
     // Upload file to S3
     const uploadResult = await this.storageService.uploadFile(
@@ -445,10 +449,15 @@ export class EmailProcessingService {
         email,
         phone: parsedData.personalInfo?.phone,
         location: parsedData.personalInfo?.location,
+        country: parsedData.personalInfo?.country,
+        region: parsedData.personalInfo?.region,
+        city: parsedData.personalInfo?.city,
         linkedinUrl: parsedData.personalInfo?.linkedinUrl,
         githubUrl: parsedData.personalInfo?.githubUrl,
         portfolioUrl: parsedData.personalInfo?.portfolioUrl,
         source: 'EMAIL',
+        sourceChannel: 'EMAIL_INBOX',
+        sourceDetail: inboxEmail ?? null,
         status: 'NEW',
         cvFileUrl: uploadResult.url,
         cvFileName: filename,
@@ -460,6 +469,7 @@ export class EmailProcessingService {
         projects: parsedData.projects || [],
         certifications: parsedData.certifications || [],
         languages: parsedData.languages || [],
+        ...deriveCandidateFacets(parsedData),
         aiSummary,
         companyId,
         jobId,
@@ -485,6 +495,7 @@ export class EmailProcessingService {
     senderEmail: string,
     senderName: string,
     classification: { detectedPosition?: string | null },
+    inboxEmail?: string,
   ): Promise<boolean> {
     const existing = await this.prisma.candidate.findFirst({
       where: { companyId, email: senderEmail.toLowerCase() },
@@ -519,6 +530,8 @@ export class EmailProcessingService {
         fullName: senderName || senderEmail.split('@')[0],
         email: senderEmail.toLowerCase(),
         source: 'EMAIL',
+        sourceChannel: 'EMAIL_INBOX',
+        sourceDetail: inboxEmail ?? null,
         status: 'NEW',
         cvFileUrl: '',
         aiSummary: `Candidate applied via email. Subject: ${emailImport.subject}`,
@@ -554,6 +567,9 @@ export class EmailProcessingService {
           email: candidate.email,
           phone: candidate.phone,
           location: candidate.location,
+          country: candidate.country,
+          region: candidate.region,
+          city: candidate.city,
           linkedinUrl: candidate.linkedinUrl,
           githubUrl: candidate.githubUrl,
           portfolioUrl: candidate.portfolioUrl,

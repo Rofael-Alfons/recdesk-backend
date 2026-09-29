@@ -3,6 +3,7 @@ import {
   IsString,
   IsOptional,
   IsEnum,
+  IsBoolean,
   MinLength,
   MaxLength,
   Matches,
@@ -40,4 +41,13 @@ export class UpdateCompanyDto {
   @IsOptional()
   @IsEnum(PlanType)
   plan?: PlanType;
+
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      'SENSITIVE. Opt in to collecting candidate gender. Off by default.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  collectGenderData?: boolean;
 }
