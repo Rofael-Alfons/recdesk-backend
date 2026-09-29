@@ -1,23 +1,9 @@
-import {
-  IsArray,
-  IsUUID,
-  IsOptional,
-  IsString,
-  ArrayMinSize,
-} from 'class-validator';
+import { IsUUID, IsOptional, IsString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CandidateSelectionDto } from '../../candidates/selection/candidate-selection.dto';
 
-export class BulkSendEmailDto {
-  @ApiProperty({
-    description: 'Array of candidate IDs to send emails to',
-    type: [String],
-    example: ['uuid-1', 'uuid-2', 'uuid-3'],
-  })
-  @IsArray()
-  @IsUUID('4', { each: true })
-  @ArrayMinSize(1)
-  candidateIds: string[];
-
+// Recipients: `candidateIds`, or `filter` (+ `excludeIds`) for "all matching".
+export class BulkSendEmailDto extends CandidateSelectionDto {
   @ApiProperty({ description: 'Email template ID to use' })
   @IsUUID()
   templateId: string;

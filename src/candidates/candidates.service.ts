@@ -15,14 +15,64 @@ import {
   BulkAddTagsDto,
   BulkAssignJobDto,
   BulkDeleteDto,
+  BulkExportDto,
+  BulkRejectDto,
+  BulkRemoveTagsDto,
   RescoreCandidateDto,
 } from './dto';
-import { Prisma } from '@prisma/client';
+import { CandidateStatus, Prisma } from '@prisma/client';
+import {
+  CLOSED_STATUSES,
+  categoryForStatus,
+  effectiveStage,
+  stageCategory,
+  stageForStatus,
+  statusForStage,
+} from '../common/pipeline-stage.util';
+import { CandidateSelectionService } from './selection/candidate-selection.service';
+import { MAX_BULK } from './selection/candidate-selection.dto';
+import {
+  ScheduledEmailsService,
+  SCHEDULED_EMAIL_PURPOSE,
+} from '../email-sending/scheduled-emails.service';
 import { QueueService } from '../queue/queue.service';
 import { AiService, ParsedCVData } from '../ai/ai.service';
 import { StorageService } from '../storage/storage.service';
 import { PHOTO_SIGNED_URL_TTL_SECONDS } from '../document-requests/document-requests.constants';
 import { recordCandidateScoreHistory } from '../common/candidate-score-history.util';
+import {
+  buildCandidateOrderBy,
+  buildCandidateWhere,
+} from './candidate-where.builder';
+
+export interface FilterOption {
+  value: string;
+  label: string;
+  count: number;
+}
+
+export interface CandidateFilterOptions {
+  countries: FilterOption[];
+  regions: FilterOption[];
+  cities: FilterOption[];
+  universities: FilterOption[];
+  skills: FilterOption[];
+  languages: FilterOption[];
+  tags: FilterOption[];
+  genderEnabled: boolean;
+}
+
+const FILTER_OPTION_LIMIT = 200;
+const SKILL_OPTION_LIMIT = 300;
+const UNIVERSITY_OPTION_LIMIT = 100;
+
+// Fixed SQL fragments (never user input) for the plain-column facets.
+const FACET_COLUMN_SQL = {
+  country: Prisma.sql`c.country`,
+  region: Prisma.sql`c.region`,
+  city: Prisma.sql`c.city`,
+  university: Prisma.sql`c.university`,
+};
 
 @Injectable()
 export class CandidatesService {
@@ -32,10 +82,33 @@ export class CandidatesService {
     private prisma: PrismaService,
     private aiService: AiService,
     private storageService: StorageService,
+    private candidateSelection: CandidateSelectionService,
+    private scheduledEmails: ScheduledEmailsService,
     @Optional() @Inject(QueueService) private queueService?: QueueService,
   ) { }
 
+  /**
+   * Gender is sensitive data. It is opt-in per tenant, so both reads and
+   * writes are gated on the company's current setting: a company that turns
+   * the setting back off immediately stops seeing previously stored values.
+   */
+  private async isGenderCollectionEnabled(companyId: string): Promise<boolean> {
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { collectGenderData: true },
+    });
+
+    return company?.collectGenderData ?? false;
+  }
+
   async create(dto: CreateCandidateDto, companyId: string) {
+    const genderEnabled = await this.isGenderCollectionEnabled(companyId);
+    if (dto.gender !== undefined && !genderEnabled) {
+      throw new BadRequestException(
+        'Gender collection is not enabled for this company',
+      );
+    }
+
     // Check for duplicate email if provided
     if (dto.email) {
       const existing = await this.prisma.candidate.findFirst({
@@ -66,10 +139,16 @@ export class CandidatesService {
         email: dto.email?.toLowerCase(),
         phone: dto.phone,
         location: dto.location,
+        country: dto.country,
+        region: dto.region,
+        city: dto.city,
+        gender: dto.gender,
         linkedinUrl: dto.linkedinUrl,
         githubUrl: dto.githubUrl,
         portfolioUrl: dto.portfolioUrl,
         source: dto.source || 'MANUAL',
+        sourceChannel: dto.sourceChannel,
+        sourceDetail: dto.sourceDetail,
         status: dto.status || 'NEW',
         tags: dto.tags || [],
         cvFileUrl: '', // Will be updated when CV is uploaded
@@ -81,50 +160,24 @@ export class CandidatesService {
       },
     });
 
-    return this.formatCandidateResponse(candidate, false);
+    return this.formatCandidateResponse(candidate, false, genderEnabled);
   }
 
   async findAll(companyId: string, query: QueryCandidatesDto) {
     const {
-      status,
-      source,
-      jobId,
-      minScore,
-      maxScore,
-      search,
-      tag,
       sortBy = 'createdAt',
       sortOrder = 'desc',
       page = 1,
       limit = 50,
+      ...filters
     } = query;
 
     const skip = (page - 1) * limit;
 
-    const where: Prisma.CandidateWhereInput = {
-      companyId,
-      ...(status && { status }),
-      ...(source && { source }),
-      ...(jobId && { jobId }),
-      ...(minScore !== undefined && { overallScore: { gte: minScore } }),
-      ...(maxScore !== undefined && { overallScore: { lte: maxScore } }),
-      ...(tag && { tags: { has: tag } }),
-      ...(search && {
-        OR: [
-          { fullName: { contains: search, mode: 'insensitive' } },
-          { email: { contains: search, mode: 'insensitive' } },
-        ],
-      }),
-    };
+    const genderEnabled = await this.isGenderCollectionEnabled(companyId);
+    const where = buildCandidateWhere(companyId, filters, genderEnabled);
 
-    const orderBy: Prisma.CandidateOrderByWithRelationInput = {};
-    if (sortBy === 'score') {
-      orderBy.overallScore = sortOrder;
-    } else if (sortBy === 'name') {
-      orderBy.fullName = sortOrder;
-    } else {
-      orderBy.createdAt = sortOrder;
-    }
+    const orderBy = buildCandidateOrderBy(sortBy, sortOrder);
 
     const [candidates, total] = await Promise.all([
       this.prisma.candidate.findMany({
@@ -141,7 +194,9 @@ export class CandidatesService {
 
     // Format candidates without signed URLs for list view (performance)
     const formattedCandidates = await Promise.all(
-      candidates.map((c) => this.formatCandidateResponse(c, false)),
+      candidates.map((c) =>
+        this.formatCandidateResponse(c, false, genderEnabled),
+      ),
     );
 
     return {
@@ -155,11 +210,131 @@ export class CandidatesService {
     };
   }
 
+  /**
+   * Facet values actually present in this company's candidates, with counts,
+   * so the filter panel never offers a value that returns zero rows. Values
+   * are what the filter matches on; labels are what the recruiter sees.
+   */
+  async getFilterOptions(companyId: string): Promise<CandidateFilterOptions> {
+    const [countries, regions, cities, universities, skills, languages, tags, genderEnabled] =
+      await Promise.all([
+        this.countByColumn(companyId, 'country', FILTER_OPTION_LIMIT),
+        this.countByColumn(companyId, 'region', FILTER_OPTION_LIMIT),
+        this.countByColumn(companyId, 'city', FILTER_OPTION_LIMIT),
+        this.countByColumn(companyId, 'university', UNIVERSITY_OPTION_LIMIT),
+        this.skillOptions(companyId),
+        this.languageOptions(companyId),
+        this.tagOptions(companyId),
+        this.isGenderCollectionEnabled(companyId),
+      ]);
+
+    return { countries, regions, cities, universities, skills, languages, tags, genderEnabled };
+  }
+
+  private countByColumn(
+    companyId: string,
+    column: keyof typeof FACET_COLUMN_SQL,
+    take: number,
+  ): Promise<FilterOption[]> {
+    const col = FACET_COLUMN_SQL[column];
+    return this.prisma.$queryRaw<FilterOption[]>`
+      SELECT ${col} AS value, ${col} AS label, COUNT(*)::int AS count
+      FROM candidates c
+      WHERE c."companyId" = ${companyId} AND ${col} IS NOT NULL AND ${col} <> ''
+      GROUP BY ${col}
+      ORDER BY count DESC, value ASC
+      LIMIT ${take}
+    `;
+  }
+
+  // Counts come from skillsNormalized (what the filter matches); the label is
+  // the most common original spelling in the parsed JSON, e.g. "Node.js".
+  // The whitespace/lowercase/100-char rule mirrors normalizeFacetValue.
+  private skillOptions(companyId: string): Promise<FilterOption[]> {
+    return this.prisma.$queryRaw<FilterOption[]>`
+      WITH counts AS (
+        SELECT s AS value, COUNT(*)::int AS count
+        FROM candidates c, unnest(c."skillsNormalized") AS s
+        WHERE c."companyId" = ${companyId}
+        GROUP BY s
+        ORDER BY count DESC, s ASC
+        LIMIT ${SKILL_OPTION_LIMIT}
+      ),
+      spellings AS (
+        SELECT btrim(regexp_replace(e, '\\s+', ' ', 'g')) AS original
+        FROM candidates c,
+          jsonb_array_elements_text(
+            CASE WHEN jsonb_typeof(c.skills) = 'array' THEN c.skills ELSE '[]'::jsonb END
+          ) AS e
+        WHERE c."companyId" = ${companyId}
+      ),
+      labels AS (
+        SELECT lower(left(original, 100)) AS value,
+          mode() WITHIN GROUP (ORDER BY original) AS label
+        FROM spellings
+        WHERE original <> ''
+        GROUP BY 1
+      )
+      SELECT counts.value, COALESCE(labels.label, counts.value) AS label, counts.count
+      FROM counts LEFT JOIN labels USING (value)
+      ORDER BY counts.count DESC, counts.value ASC
+    `;
+  }
+
+  private languageOptions(companyId: string): Promise<FilterOption[]> {
+    return this.prisma.$queryRaw<FilterOption[]>`
+      WITH counts AS (
+        SELECT l AS value, COUNT(DISTINCT c.id)::int AS count
+        FROM candidates c, unnest(c."languageNames") AS l
+        WHERE c."companyId" = ${companyId}
+        GROUP BY l
+        ORDER BY count DESC, l ASC
+        LIMIT ${FILTER_OPTION_LIMIT}
+      ),
+      spellings AS (
+        SELECT btrim(regexp_replace(e->>'language', '\\s+', ' ', 'g')) AS original
+        FROM candidates c,
+          jsonb_array_elements(
+            CASE WHEN jsonb_typeof(c.languages) = 'array' THEN c.languages ELSE '[]'::jsonb END
+          ) AS e
+        WHERE c."companyId" = ${companyId} AND jsonb_typeof(e) = 'object'
+      ),
+      labels AS (
+        SELECT lower(left(original, 100)) AS value,
+          mode() WITHIN GROUP (ORDER BY original) AS label
+        FROM spellings
+        WHERE original <> ''
+        GROUP BY 1
+      )
+      SELECT counts.value, COALESCE(labels.label, counts.value) AS label, counts.count
+      FROM counts LEFT JOIN labels USING (value)
+      ORDER BY counts.count DESC, counts.value ASC
+    `;
+  }
+
+  private tagOptions(companyId: string): Promise<FilterOption[]> {
+    return this.prisma.$queryRaw<FilterOption[]>`
+      SELECT t AS value, t AS label, COUNT(DISTINCT c.id)::int AS count
+      FROM candidates c, unnest(c.tags) AS t
+      WHERE c."companyId" = ${companyId} AND t <> ''
+      GROUP BY t
+      ORDER BY count DESC, t ASC
+      LIMIT ${FILTER_OPTION_LIMIT}
+    `;
+  }
+
   async findOne(candidateId: string, companyId: string) {
     const candidate = await this.prisma.candidate.findFirst({
       where: { id: candidateId, companyId },
       include: {
-        job: { select: { id: true, title: true, status: true } },
+        job: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            pipelineStages: { orderBy: { orderIndex: 'asc' } },
+          },
+        },
         scores: {
           include: { job: { select: { id: true, title: true } } },
           orderBy: { scoredAt: 'desc' },
@@ -172,6 +347,7 @@ export class CandidatesService {
           include: { stage: true },
           orderBy: { movedAt: 'desc' },
         },
+        referredBy: { select: { id: true, firstName: true, lastName: true } },
       },
     });
 
@@ -180,13 +356,40 @@ export class CandidatesService {
     }
 
     // Include signed URL for detail view
-    const formatted = await this.formatCandidateResponse(candidate, true);
+    const formatted = await this.formatCandidateResponse(
+      candidate,
+      true,
+      await this.isGenderCollectionEnabled(companyId),
+    );
+
+    const stages = (candidate.job?.pipelineStages ?? []).map((s) => ({
+      id: s.id,
+      name: s.name,
+      color: s.color,
+      orderIndex: s.orderIndex,
+      category: stageCategory(s),
+    }));
 
     return {
       ...formatted,
+      job: candidate.job
+        ? {
+            id: candidate.job.id,
+            title: candidate.job.title,
+            status: candidate.job.status,
+            pipelineStages: stages,
+          }
+        : null,
+      // The pipeline stage the candidate is in (stored, else derived from
+      // status). Kept for rejected/withdrawn too: "rejected at X".
+      currentStage: candidate.job ? effectiveStage(candidate, stages) : null,
       scores: candidate.scores,
       notes: candidate.notes,
       stageHistory: candidate.stageHistory,
+      // Null for non-referrals, and for referrals whose referrer was deleted
+      // (referralCode is kept in that case).
+      referredBy: candidate.referredBy,
+      referralCode: candidate.referralCode,
     };
   }
 
@@ -197,6 +400,13 @@ export class CandidatesService {
 
     if (!existing) {
       throw new NotFoundException('Candidate not found');
+    }
+
+    const genderEnabled = await this.isGenderCollectionEnabled(companyId);
+    if (dto.gender !== undefined && !genderEnabled) {
+      throw new BadRequestException(
+        'Gender collection is not enabled for this company',
+      );
     }
 
     // Check for duplicate email if changing
@@ -224,18 +434,50 @@ export class CandidatesService {
       }
     }
 
+    // Reports — record the moment a candidate first reaches HIRED. Guarded
+    // against both the DTO status already being HIRED-to-HIRED (no-op save)
+    // and an existing hiredAt (never overwritten on later edits).
+    const isNewlyHired =
+      dto.status === 'HIRED' && existing.status !== 'HIRED' && !existing.hiredAt;
+
+    const leavesRejected =
+      !!dto.status && dto.status !== 'REJECTED' && existing.status === 'REJECTED';
+
+    // Keep the pipeline position consistent with a job or status change.
+    const jobChanged = dto.jobId !== undefined && dto.jobId !== existing.jobId;
+    const nextStatus = dto.status ?? existing.status;
+    let nextStageId: string | null | undefined;
+    if (jobChanged) {
+      nextStageId = dto.jobId
+        ? (await this.stageSyncForJob([{ ...existing, status: nextStatus }], dto.jobId))
+            .get(candidateId) ?? null
+        : null;
+    } else if (dto.status && dto.status !== existing.status) {
+      const moves = await this.stageSyncForStatus([existing], dto.status);
+      nextStageId = moves.get(candidateId);
+    }
+
     const candidate = await this.prisma.candidate.update({
       where: { id: candidateId },
       data: {
+        ...(nextStageId !== undefined && { currentStageId: nextStageId }),
+        ...(leavesRejected && { rejectionReason: null, rejectionNote: null }),
         ...(dto.fullName && { fullName: dto.fullName }),
         ...(dto.email && { email: dto.email.toLowerCase() }),
         ...(dto.phone !== undefined && { phone: dto.phone }),
         ...(dto.location !== undefined && { location: dto.location }),
+        ...(dto.country !== undefined && { country: dto.country }),
+        ...(dto.region !== undefined && { region: dto.region }),
+        ...(dto.city !== undefined && { city: dto.city }),
+        ...(dto.gender !== undefined && { gender: dto.gender }),
         ...(dto.linkedinUrl !== undefined && { linkedinUrl: dto.linkedinUrl }),
         ...(dto.githubUrl !== undefined && { githubUrl: dto.githubUrl }),
         ...(dto.portfolioUrl !== undefined && { portfolioUrl: dto.portfolioUrl }),
         ...(dto.source && { source: dto.source }),
+        ...(dto.sourceChannel && { sourceChannel: dto.sourceChannel }),
+        ...(dto.sourceDetail !== undefined && { sourceDetail: dto.sourceDetail }),
         ...(dto.status && { status: dto.status }),
+        ...(isNewlyHired && { hiredAt: new Date() }),
         ...(dto.jobId !== undefined && { jobId: dto.jobId }),
         ...(dto.tags && { tags: dto.tags }),
         ...(dto.startDate !== undefined && {
@@ -247,7 +489,11 @@ export class CandidatesService {
       },
     });
 
-    return this.formatCandidateResponse(candidate, false);
+    if (leavesRejected) {
+      await this.cancelRejectionEmails(companyId, [candidateId], null);
+    }
+
+    return this.formatCandidateResponse(candidate, false, genderEnabled);
   }
 
   async remove(candidateId: string, companyId: string) {
@@ -267,66 +513,368 @@ export class CandidatesService {
   }
 
   async bulkUpdateStatus(dto: BulkUpdateStatusDto, companyId: string, userId: string) {
-    // Verify all candidates belong to company
+    const ids = await this.candidateSelection.resolveIds(companyId, dto);
     const candidates = await this.prisma.candidate.findMany({
-      where: {
-        id: { in: dto.candidateIds },
-        companyId,
+      where: { id: { in: ids }, companyId },
+      select: {
+        id: true,
+        status: true,
+        hiredAt: true,
+        jobId: true,
+        currentStageId: true,
       },
-      select: { id: true },
     });
+    const stageMoves = await this.stageSyncForStatus(candidates, dto.status);
 
-    if (candidates.length !== dto.candidateIds.length) {
-      throw new BadRequestException('Some candidates were not found');
-    }
+    // Reports — only candidates genuinely transitioning into HIRED get
+    // hiredAt set; already-hired candidates re-saved as HIRED (a no-op
+    // status-wise) keep their original hiredAt.
+    const newlyHiredIds =
+      dto.status === 'HIRED'
+        ? candidates.filter((c) => c.status !== 'HIRED' && !c.hiredAt).map((c) => c.id)
+        : [];
+    const newlyHired = new Set(newlyHiredIds);
+    const restIds = ids.filter((id) => !newlyHired.has(id));
+
+    const leavesRejected = dto.status !== 'REJECTED';
+    const unrejectedIds = leavesRejected
+      ? candidates.filter((c) => c.status === 'REJECTED').map((c) => c.id)
+      : [];
+    const clearRejection = leavesRejected
+      ? { rejectionReason: null, rejectionNote: null }
+      : {};
 
     await this.prisma.$transaction([
-      this.prisma.candidate.updateMany({
-        where: { id: { in: dto.candidateIds } },
-        data: { status: dto.status },
-      }),
+      ...(newlyHiredIds.length
+        ? [
+            this.prisma.candidate.updateMany({
+              where: { id: { in: newlyHiredIds } },
+              data: { status: dto.status, hiredAt: new Date(), ...clearRejection },
+            }),
+          ]
+        : []),
+      ...(restIds.length
+        ? [
+            this.prisma.candidate.updateMany({
+              where: { id: { in: restIds } },
+              data: { status: dto.status, ...clearRejection },
+            }),
+          ]
+        : []),
       this.prisma.candidateAction.createMany({
-        data: dto.candidateIds.map((candidateId) => ({
+        data: ids.map((candidateId) => ({
           candidateId,
           userId,
           action: 'status_changed',
           details: { newStatus: dto.status },
         })),
       }),
+      ...this.stageMoveOps(stageMoves),
     ]);
 
+    await this.cancelRejectionEmails(companyId, unrejectedIds, userId);
+
     return {
-      message: `Updated ${candidates.length} candidates to status: ${dto.status}`,
+      message: `Updated ${ids.length} candidates to status: ${dto.status}`,
+      updatedCount: ids.length,
+    };
+  }
+
+  /**
+   * Reject with a reason, optionally scheduling a rejection email. The email
+   * waits in scheduled_emails until `delayHours` have passed, so it can be
+   * cancelled, and it is dropped automatically if the candidate is moved out
+   * of REJECTED before then.
+   */
+  async bulkReject(dto: BulkRejectDto, companyId: string, userId: string) {
+    const ids = await this.candidateSelection.resolveIds(companyId, dto);
+
+    if (dto.email) {
+      const template = await this.prisma.emailTemplate.findFirst({
+        where: { id: dto.email.templateId, companyId },
+        select: { id: true },
+      });
+      if (!template) throw new BadRequestException('Email template not found');
+    }
+
+    const note = dto.note?.trim() || null;
+    await this.prisma.$transaction([
+      this.prisma.candidate.updateMany({
+        where: { id: { in: ids }, companyId },
+        data: {
+          status: 'REJECTED',
+          rejectionReason: dto.reason,
+          rejectionNote: note,
+        },
+      }),
+      this.prisma.candidateAction.createMany({
+        data: ids.map((candidateId) => ({
+          candidateId,
+          userId,
+          action: 'status_changed',
+          details: {
+            newStatus: 'REJECTED',
+            reason: dto.reason,
+            ...(note && { note }),
+          },
+        })),
+      }),
+    ]);
+
+    let emailsScheduled = 0;
+    let skippedNoEmail = 0;
+    let sendAt: Date | null = null;
+    if (dto.email) {
+      // Re-rejecting replaces a still-pending email rather than adding a
+      // second one.
+      await this.cancelRejectionEmails(companyId, ids, userId);
+      const recipients = await this.prisma.candidate.findMany({
+        where: {
+          id: { in: ids },
+          companyId,
+          email: { not: null },
+          NOT: { email: '' },
+        },
+        select: { id: true },
+      });
+      sendAt = new Date(Date.now() + dto.email.delayHours * 3_600_000);
+      emailsScheduled = await this.scheduledEmails.schedule(
+        recipients.map((candidate) => ({
+          companyId,
+          candidateId: candidate.id,
+          templateId: dto.email!.templateId,
+          purpose: SCHEDULED_EMAIL_PURPOSE.REJECTION,
+          sendAt: sendAt!,
+          createdById: userId,
+        })),
+      );
+      skippedNoEmail = ids.length - recipients.length;
+    }
+
+    return {
+      message: `Rejected ${ids.length} candidates`,
+      updatedCount: ids.length,
+      emailsScheduled,
+      skippedNoEmail,
+      sendAt,
+    };
+  }
+
+  /**
+   * Move a candidate to a stage of their job. Status follows the stage's
+   * category (see statusForStage); moving a rejected/withdrawn candidate
+   * reopens them. Records stage history and an audit action.
+   */
+  async moveToStage(
+    candidateId: string,
+    stageId: string,
+    companyId: string,
+    userId: string,
+  ) {
+    const candidate = await this.prisma.candidate.findFirst({
+      where: { id: candidateId, companyId },
+      select: {
+        id: true,
+        jobId: true,
+        status: true,
+        hiredAt: true,
+        currentStageId: true,
+      },
+    });
+    if (!candidate) throw new NotFoundException('Candidate not found');
+    if (!candidate.jobId) {
+      throw new BadRequestException(
+        'Assign the candidate to a job before moving them through its pipeline',
+      );
+    }
+
+    const stage = await this.prisma.pipelineStage.findFirst({
+      where: { id: stageId, jobId: candidate.jobId },
+    });
+    if (!stage) throw new NotFoundException('Stage not found for this job');
+
+    const isClosed = CLOSED_STATUSES.includes(candidate.status);
+    const newStatus = statusForStage(
+      stage,
+      isClosed ? undefined : candidate.status,
+    );
+    const isNewlyHired =
+      newStatus === 'HIRED' && candidate.status !== 'HIRED' && !candidate.hiredAt;
+    const leavesRejected = candidate.status === 'REJECTED';
+
+    await this.prisma.$transaction([
+      this.prisma.candidate.update({
+        where: { id: candidateId },
+        data: {
+          currentStageId: stage.id,
+          status: newStatus,
+          ...(isNewlyHired && { hiredAt: new Date() }),
+          ...(leavesRejected && { rejectionReason: null, rejectionNote: null }),
+        },
+      }),
+      this.prisma.candidateStage.create({
+        data: { candidateId, stageId: stage.id },
+      }),
+      this.prisma.candidateAction.create({
+        data: {
+          candidateId,
+          userId,
+          action: 'moved_to_stage',
+          details: {
+            fromStageId: candidate.currentStageId,
+            toStageId: stage.id,
+            stageName: stage.name,
+            previousStatus: candidate.status,
+            newStatus,
+          },
+        },
+      }),
+    ]);
+
+    if (leavesRejected) {
+      await this.cancelRejectionEmails(companyId, [candidateId], userId);
+    }
+
+    return {
+      candidateId,
+      status: newStatus,
+      currentStage: {
+        id: stage.id,
+        name: stage.name,
+        color: stage.color,
+        orderIndex: stage.orderIndex,
+        category: stageCategory(stage),
+      },
+    };
+  }
+
+  /**
+   * Stage changes needed so each candidate's pipeline position matches a new
+   * status: candidates already in a stage of the status's category stay put;
+   * others move to the first stage of that category. Closed statuses
+   * (rejected/withdrawn) keep the stage. Returns candidateId -> new stageId.
+   */
+  private async stageSyncForStatus(
+    candidates: {
+      id: string;
+      jobId: string | null;
+      status: CandidateStatus;
+      currentStageId: string | null;
+    }[],
+    newStatus: CandidateStatus,
+  ): Promise<Map<string, string>> {
+    const moves = new Map<string, string>();
+    const category = categoryForStatus(newStatus);
+    const withJob = candidates.filter((c) => c.jobId);
+    if (!category || withJob.length === 0) return moves;
+
+    const stagesByJob = await this.loadStagesByJob(withJob.map((c) => c.jobId!));
+    for (const c of withJob) {
+      const stages = stagesByJob.get(c.jobId!) ?? [];
+      const current = effectiveStage(c, stages);
+      // Already in the right kind of stage (e.g. SHORTLISTED in Screening).
+      if (current && stageCategory(current) === category) continue;
+      const target = stageForStatus(stages, newStatus);
+      if (target && target.id !== c.currentStageId) moves.set(c.id, target.id);
+    }
+    return moves;
+  }
+
+  /** Starting stage for each candidate on `jobId`, based on their status. */
+  private async stageSyncForJob(
+    candidates: { id: string; status: CandidateStatus }[],
+    jobId: string,
+  ): Promise<Map<string, string>> {
+    const moves = new Map<string, string>();
+    if (candidates.length === 0) return moves;
+    const stages = (await this.loadStagesByJob([jobId])).get(jobId) ?? [];
+    for (const c of candidates) {
+      const target = stageForStatus(stages, c.status);
+      if (target) moves.set(c.id, target.id);
+    }
+    return moves;
+  }
+
+  private async loadStagesByJob(jobIds: string[]) {
+    const stages = await this.prisma.pipelineStage.findMany({
+      where: { jobId: { in: [...new Set(jobIds)] } },
+      select: { id: true, name: true, orderIndex: true, category: true, jobId: true },
+    });
+    const byJob = new Map<string, typeof stages>();
+    for (const s of stages) {
+      byJob.set(s.jobId, [...(byJob.get(s.jobId) ?? []), s]);
+    }
+    return byJob;
+  }
+
+  /** Batched writes for stage moves: one updateMany per target stage + history. */
+  private stageMoveOps(moves: Map<string, string>): Prisma.PrismaPromise<unknown>[] {
+    if (moves.size === 0) return [];
+    const byStage = new Map<string, string[]>();
+    for (const [candidateId, stageId] of moves) {
+      byStage.set(stageId, [...(byStage.get(stageId) ?? []), candidateId]);
+    }
+    return [
+      ...[...byStage].map(([stageId, candidateIds]) =>
+        this.prisma.candidate.updateMany({
+          where: { id: { in: candidateIds } },
+          data: { currentStageId: stageId },
+        }),
+      ),
+      this.prisma.candidateStage.createMany({
+        data: [...moves].map(([candidateId, stageId]) => ({ candidateId, stageId })),
+      }),
+    ];
+  }
+
+  async bulkAddTags(dto: BulkAddTagsDto, companyId: string) {
+    const ids = await this.candidateSelection.resolveIds(companyId, dto);
+    const candidates = await this.prisma.candidate.findMany({
+      where: { id: { in: ids }, companyId },
+      select: { id: true, tags: true },
+    });
+
+    await this.updateInChunks(candidates, (candidate) => {
+      const mergedTags = [...new Set([...candidate.tags, ...dto.tags])];
+      return this.prisma.candidate.update({
+        where: { id: candidate.id },
+        data: { tags: mergedTags },
+      });
+    });
+
+    return {
+      message: `Added tags to ${candidates.length} candidates`,
       updatedCount: candidates.length,
     };
   }
 
-  async bulkAddTags(dto: BulkAddTagsDto, companyId: string) {
+  async bulkRemoveTags(dto: BulkRemoveTagsDto, companyId: string, userId: string) {
+    const ids = await this.candidateSelection.resolveIds(companyId, dto);
     const candidates = await this.prisma.candidate.findMany({
-      where: {
-        id: { in: dto.candidateIds },
-        companyId,
-      },
+      where: { id: { in: ids }, companyId, tags: { hasSome: dto.tags } },
       select: { id: true, tags: true },
     });
 
-    if (candidates.length !== dto.candidateIds.length) {
-      throw new BadRequestException('Some candidates were not found');
-    }
-
-    // Update each candidate with merged tags
-    await Promise.all(
-      candidates.map((candidate) => {
-        const mergedTags = [...new Set([...candidate.tags, ...dto.tags])];
-        return this.prisma.candidate.update({
-          where: { id: candidate.id },
-          data: { tags: mergedTags },
-        });
+    const removed = new Set(dto.tags);
+    await this.updateInChunks(candidates, (candidate) =>
+      this.prisma.candidate.update({
+        where: { id: candidate.id },
+        data: { tags: candidate.tags.filter((tag) => !removed.has(tag)) },
       }),
     );
+    if (candidates.length) {
+      await this.prisma.candidateAction.createMany({
+        data: candidates.map((candidate) => ({
+          candidateId: candidate.id,
+          userId,
+          action: 'tags_removed',
+          details: { tags: dto.tags },
+        })),
+      });
+    }
 
     return {
-      message: `Added tags to ${candidates.length} candidates`,
+      message: `Removed tags from ${candidates.length} candidates`,
       updatedCount: candidates.length,
     };
   }
@@ -341,25 +889,23 @@ export class CandidatesService {
       throw new BadRequestException('Job not found');
     }
 
-    const candidates = await this.prisma.candidate.findMany({
-      where: {
-        id: { in: dto.candidateIds },
-        companyId,
-      },
-      select: { id: true },
+    const ids = await this.candidateSelection.resolveIds(companyId, dto);
+    const current = await this.prisma.candidate.findMany({
+      where: { id: { in: ids }, companyId },
+      select: { id: true, status: true, jobId: true, currentStageId: true },
     });
-
-    if (candidates.length !== dto.candidateIds.length) {
-      throw new BadRequestException('Some candidates were not found');
-    }
+    // Candidates already on this job keep their stage.
+    const moving = current.filter((c) => c.jobId !== dto.jobId);
+    const stageMoves = await this.stageSyncForJob(moving, dto.jobId);
 
     await this.prisma.$transaction([
       this.prisma.candidate.updateMany({
-        where: { id: { in: dto.candidateIds } },
+        where: { id: { in: ids }, companyId },
         data: { jobId: dto.jobId },
       }),
+      ...this.stageMoveOps(stageMoves),
       this.prisma.candidateAction.createMany({
-        data: dto.candidateIds.map((candidateId) => ({
+        data: ids.map((candidateId) => ({
           candidateId,
           userId,
           action: 'assigned_to_job',
@@ -369,32 +915,112 @@ export class CandidatesService {
     ]);
 
     return {
-      message: `Assigned ${candidates.length} candidates to job: ${job.title}`,
-      updatedCount: candidates.length,
+      message: `Assigned ${ids.length} candidates to job: ${job.title}`,
+      updatedCount: ids.length,
     };
   }
 
   async bulkDelete(dto: BulkDeleteDto, companyId: string) {
-    const candidates = await this.prisma.candidate.findMany({
-      where: {
-        id: { in: dto.candidateIds },
-        companyId,
-      },
-      select: { id: true },
-    });
+    const ids = await this.candidateSelection.resolveIds(companyId, dto);
 
-    if (candidates.length !== dto.candidateIds.length) {
-      throw new BadRequestException('Some candidates were not found');
-    }
-
-    await this.prisma.candidate.deleteMany({
-      where: { id: { in: dto.candidateIds }, companyId },
+    const { count } = await this.prisma.candidate.deleteMany({
+      where: { id: { in: ids }, companyId },
     });
 
     return {
-      message: `Deleted ${candidates.length} candidates`,
-      deletedCount: candidates.length,
+      message: `Deleted ${count} candidates`,
+      deletedCount: count,
     };
+  }
+
+  /**
+   * The rows behind a CSV export, in the selection's list order. Only the
+   * fields export columns use, so a 5000-row export stays small.
+   */
+  async bulkExport(dto: BulkExportDto, companyId: string) {
+    const ids = await this.candidateSelection.resolveIds(companyId, dto);
+    const rows = await this.prisma.candidate.findMany({
+      where: { id: { in: ids }, companyId },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        status: true,
+        source: true,
+        sourceChannel: true,
+        overallScore: true,
+        tags: true,
+        location: true,
+        linkedinUrl: true,
+        githubUrl: true,
+        portfolioUrl: true,
+        aiSummary: true,
+        skills: true,
+        cvFileName: true,
+        createdAt: true,
+        updatedAt: true,
+        job: { select: { id: true, title: true } },
+      },
+    });
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const data = ids.flatMap((id) => byId.get(id) ?? []);
+    return { data, total: data.length };
+  }
+
+  /**
+   * Where a candidate sits in a filtered, sorted list, for next/previous
+   * review. Lists longer than MAX_BULK are walked over their first MAX_BULK
+   * rows (`truncated`). A candidate outside the list gets a null position.
+   */
+  async getNeighbors(
+    candidateId: string,
+    companyId: string,
+    query: QueryCandidatesDto,
+  ) {
+    const exists = await this.prisma.candidate.count({
+      where: { id: candidateId, companyId },
+    });
+    if (!exists) throw new NotFoundException('Candidate not found');
+
+    const ids = await this.candidateSelection.orderedIds(
+      companyId,
+      query,
+      MAX_BULK,
+    );
+    const index = ids.indexOf(candidateId);
+    const found = index !== -1;
+    return {
+      position: found ? index + 1 : null,
+      total: ids.length,
+      truncated: ids.length === MAX_BULK,
+      prevId: found && index > 0 ? ids[index - 1] : null,
+      nextId: found && index < ids.length - 1 ? ids[index + 1] : null,
+    };
+  }
+
+  private async cancelRejectionEmails(
+    companyId: string,
+    candidateIds: string[],
+    userId: string | null,
+  ) {
+    await this.scheduledEmails.cancelPendingForCandidates(
+      companyId,
+      candidateIds,
+      SCHEDULED_EMAIL_PURPOSE.REJECTION,
+      userId,
+    );
+  }
+
+  /** Per-row updates, a bounded number at a time (bulk can be 5000 rows). */
+  private async updateInChunks<T>(
+    items: T[],
+    update: (item: T) => Promise<unknown>,
+    size = 25,
+  ) {
+    for (let i = 0; i < items.length; i += size) {
+      await Promise.all(items.slice(i, i + size).map(update));
+    }
   }
 
   async getStats(companyId: string) {
@@ -529,6 +1155,9 @@ export class CandidatesService {
         email: candidate.email,
         phone: candidate.phone,
         location: candidate.location,
+        country: candidate.country,
+        region: candidate.region,
+        city: candidate.city,
         linkedinUrl: candidate.linkedinUrl,
         githubUrl: candidate.githubUrl,
         portfolioUrl: candidate.portfolioUrl,
@@ -646,6 +1275,7 @@ export class CandidatesService {
   private async formatCandidateResponse(
     candidate: any,
     includeSignedUrl: boolean = false,
+    genderEnabled: boolean = false,
   ) {
     let cvFileSignedUrl: string | null = null;
 
@@ -689,10 +1319,17 @@ export class CandidatesService {
       email: candidate.email,
       phone: candidate.phone,
       location: candidate.location,
+      country: candidate.country,
+      region: candidate.region,
+      city: candidate.city,
+      // Omitted entirely, not nulled, when the tenant has not opted in.
+      ...(genderEnabled && { gender: candidate.gender }),
       linkedinUrl: candidate.linkedinUrl,
       githubUrl: candidate.githubUrl,
       portfolioUrl: candidate.portfolioUrl,
       source: candidate.source,
+      sourceChannel: candidate.sourceChannel,
+      sourceDetail: candidate.sourceDetail,
       status: candidate.status,
       cvFileUrl: candidate.cvFileUrl,
       cvFileSignedUrl, // Presigned URL for secure access
@@ -706,6 +1343,9 @@ export class CandidatesService {
       job: candidate.job,
       startDate: candidate.startDate,
       welcomeEmailSentAt: candidate.welcomeEmailSentAt,
+      hiredAt: candidate.hiredAt,
+      rejectionReason: candidate.rejectionReason ?? null,
+      rejectionNote: candidate.rejectionNote ?? null,
       createdAt: candidate.createdAt,
       updatedAt: candidate.updatedAt,
       // Parsed CV data fields
@@ -715,6 +1355,12 @@ export class CandidatesService {
       projects: candidate.projects,
       certifications: candidate.certifications,
       languages: candidate.languages,
+      // Derived filter facets (read-only)
+      currentTitle: candidate.currentTitle,
+      currentCompany: candidate.currentCompany,
+      university: candidate.university,
+      totalExperienceYears: candidate.totalExperienceYears,
+      educationLevel: candidate.educationLevel,
     };
   }
 

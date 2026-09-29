@@ -5,6 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailTemplatesService } from '../email-templates/email-templates.service';
 import {
@@ -15,6 +16,14 @@ import { BillingService } from '../billing/billing.service';
 import { SendEmailDto, BulkSendEmailDto, PreviewEmailDto } from './dto';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { EmailTemplateType } from '../email-templates/dto';
+import { CandidateSelectionService } from '../candidates/selection/candidate-selection.service';
+import {
+  ScheduledEmailsService,
+  SCHEDULED_EMAIL_PURPOSE,
+} from './scheduled-emails.service';
+
+/** Bulk sends above this size are queued instead of sent in the request. */
+export const BULK_SEND_INLINE_LIMIT = 100;
 
 export interface CalendarAttachment {
   /** Raw .ics file content */
@@ -46,6 +55,8 @@ export class EmailSendingService {
     private emailTemplatesService: EmailTemplatesService,
     private templateEngine: TemplateEngineService,
     private billingService: BillingService,
+    private candidateSelection: CandidateSelectionService,
+    private scheduledEmails: ScheduledEmailsService,
   ) {
     const region = this.configService.get<string>('ses.region');
     const accessKeyId = this.configService.get<string>('ses.accessKeyId');
@@ -78,9 +89,33 @@ export class EmailSendingService {
     userId: string,
     companyId: string,
   ): Promise<SendResult> {
-    // Get candidate with job info
+    return this.sendTemplateToCandidate({
+      candidateId: dto.candidateId,
+      companyId,
+      templateId: dto.templateId,
+      subjectOverride: dto.subjectOverride,
+      senderUserId: userId,
+    });
+  }
+
+  /**
+   * Render a company template for one candidate, send it, and record it
+   * (EmailSent, usage, CandidateAction). `senderUserId` null means a system
+   * send (e.g. a scheduled email whose author was since deleted);
+   * {{sender_name}} then falls back to the company name.
+   */
+  async sendTemplateToCandidate(params: {
+    candidateId: string;
+    companyId: string;
+    templateId: string;
+    subjectOverride?: string | null;
+    senderUserId: string | null;
+    actionDetails?: Prisma.InputJsonObject;
+  }): Promise<SendResult> {
+    const { candidateId, companyId, templateId, senderUserId } = params;
+
     const candidate = await this.prisma.candidate.findFirst({
-      where: { id: dto.candidateId, companyId },
+      where: { id: candidateId, companyId },
       include: { job: { select: { title: true } } },
     });
 
@@ -94,21 +129,21 @@ export class EmailSendingService {
 
     // Get template (scoped to company)
     const template = await this.emailTemplatesService.findOne(
-      dto.templateId,
+      templateId,
       companyId,
     );
 
-    // Get company and user info
     const [company, user] = await Promise.all([
       this.prisma.company.findUnique({ where: { id: companyId } }),
-      this.prisma.user.findUnique({ where: { id: userId } }),
+      senderUserId
+        ? this.prisma.user.findUnique({ where: { id: senderUserId } })
+        : Promise.resolve(null),
     ]);
 
-    if (!company || !user) {
+    if (!company || (senderUserId && !user)) {
       throw new NotFoundException('Company or user not found');
     }
 
-    // Build personalization context
     const context: PersonalizationContext = {
       candidate: {
         fullName: candidate.fullName,
@@ -116,43 +151,41 @@ export class EmailSendingService {
       },
       job: candidate.job,
       company: { name: company.name },
-      sender: { firstName: user.firstName, lastName: user.lastName },
+      ...(user && {
+        sender: { firstName: user.firstName, lastName: user.lastName },
+      }),
     };
 
-    // Render template
     const subject = this.templateEngine.render(
-      dto.subjectOverride || template.subject,
+      params.subjectOverride || template.subject,
       context,
     );
     const body = this.templateEngine.render(template.body, context);
 
-    // Send email
     const result = await this.sendViaProvider(candidate.email, subject, body);
 
     if (result.success) {
-      // Record sent email
       await this.prisma.emailSent.create({
         data: {
           subject,
           body,
           candidateId: candidate.id,
-          sentById: userId,
+          sentById: senderUserId,
         },
       });
 
-      // Track usage
       await this.billingService.trackUsage(companyId, 'EMAIL_SENT');
 
-      // Log action
       await this.prisma.candidateAction.create({
         data: {
           candidateId: candidate.id,
-          userId,
+          userId: senderUserId,
           action: 'email_sent',
           details: {
             templateId: template.id,
             templateName: template.name,
             subject,
+            ...params.actionDetails,
           },
         },
       });
@@ -263,6 +296,7 @@ export class EmailSendingService {
     total: number;
     successful: number;
     failed: number;
+    queued: number;
     results: SendResult[];
   }> {
     // Get template (scoped to company)
@@ -271,10 +305,50 @@ export class EmailSendingService {
       companyId,
     );
 
+    const candidateIds = await this.candidateSelection.resolveIds(
+      companyId,
+      dto,
+    );
+
+    // Too many to send inside one request: hand them to the scheduled-email
+    // sweep, which sends in batches within a minute or so.
+    if (candidateIds.length > BULK_SEND_INLINE_LIMIT) {
+      const withEmail = await this.prisma.candidate.findMany({
+        where: {
+          id: { in: candidateIds },
+          companyId,
+          email: { not: null },
+          NOT: { email: '' },
+        },
+        select: { id: true },
+      });
+      const queued = await this.scheduledEmails.schedule(
+        withEmail.map((candidate) => ({
+          companyId,
+          candidateId: candidate.id,
+          templateId: template.id,
+          subjectOverride: dto.subjectOverride,
+          purpose: SCHEDULED_EMAIL_PURPOSE.BULK,
+          sendAt: new Date(),
+          createdById: userId,
+        })),
+      );
+      this.logger.log(
+        `Bulk email queued: ${queued} of ${candidateIds.length} candidates have an address`,
+      );
+      return {
+        total: candidateIds.length,
+        successful: 0,
+        failed: candidateIds.length - queued,
+        queued,
+        results: [],
+      };
+    }
+
     // Get candidates with job info
     const candidates = await this.prisma.candidate.findMany({
       where: {
-        id: { in: dto.candidateIds },
+        id: { in: candidateIds },
         companyId,
       },
       include: { job: { select: { title: true } } },
@@ -383,6 +457,7 @@ export class EmailSendingService {
       total: candidates.length,
       successful,
       failed,
+      queued: 0,
       results,
     };
   }

@@ -4,6 +4,7 @@ import {
   Post,
   Patch,
   Delete,
+  Put,
   Body,
   Param,
   Query,
@@ -16,7 +17,12 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { JobsService } from './jobs.service';
-import { CreateJobDto, UpdateJobDto, QueryJobsDto } from './dto';
+import {
+  CreateJobDto,
+  UpdateJobDto,
+  QueryJobsDto,
+  ReplaceJobStagesDto,
+} from './dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserData } from '../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
@@ -65,6 +71,33 @@ export class JobsController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.jobsService.findOne(id, user.companyId);
+  }
+
+  @Get(':id/pipeline')
+  @ApiOperation({
+    summary:
+      'Get pipeline board data (stages, candidates, interviewers, feedback counts)',
+  })
+  @ApiResponse({ status: 200, description: 'Pipeline board retrieved' })
+  @ApiResponse({ status: 404, description: 'Job not found' })
+  async getPipeline(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.jobsService.getPipeline(id, user.companyId);
+  }
+
+  @Put(':id/stages')
+  @RequirePermissions('manageJobs')
+  @ApiOperation({ summary: "Replace a job's pipeline stages (add, rename, reorder, remove unused)" })
+  @ApiResponse({ status: 200, description: 'Updated stages, in order' })
+  @ApiResponse({ status: 409, description: 'A removed stage is still in use' })
+  async replaceStages(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReplaceJobStagesDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.jobsService.replaceStages(id, dto, user.companyId);
   }
 
   @Patch(':id')

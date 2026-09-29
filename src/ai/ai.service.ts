@@ -19,6 +19,11 @@ export interface ParsedCVData {
     email: string | null;
     phone: string | null;
     location: string | null;
+    // Decomposed from `location` when the model is confident; any part it
+    // cannot determine stays null for a recruiter to fill in manually.
+    country: string | null;
+    region: string | null;
+    city: string | null;
     linkedinUrl: string | null;
     githubUrl: string | null;
     portfolioUrl: string | null;
@@ -54,7 +59,28 @@ export interface ParsedCVData {
     proficiency: string | null;
   }>;
   summary: string | null;
+  // Filter facets. Optional because ParsedCVData is also rebuilt from stored
+  // candidates for scoring, where these are not needed.
+  totalExperienceYears?: number | null;
+  highestEducationLevel?: string | null;
 }
+
+export interface ProfileFacetsResult {
+  totalExperienceYears: number | null;
+  highestEducationLevel: string | null;
+  country: string | null;
+  region: string | null;
+  city: string | null;
+}
+
+const experienceYearsInstruction = () =>
+  `For "totalExperienceYears", sum the professional work experience in years (merge overlapping periods, treat "Present" as today, ${new Date().toISOString().slice(0, 10)}, round to 1 decimal). Return null if the dates are missing or too vague to compute.`;
+
+const EDUCATION_LEVEL_INSTRUCTION =
+  'For "highestEducationLevel", return the highest completed or in-progress level as exactly one of "HIGH_SCHOOL", "DIPLOMA", "BACHELOR", "MASTER", "DOCTORATE" (e.g. BSc/BA/Licence -> "BACHELOR", MBA/MSc -> "MASTER", PhD -> "DOCTORATE"), or null if it cannot be determined.';
+
+const LOCATION_INSTRUCTION =
+  'Decompose the location into "country" (full English country name, e.g. "Egypt"), "region" (governorate/state/province, e.g. "Cairo") and "city" (e.g. "Nasr City"). Example: "Nasr City, Cairo, Egypt" -> country "Egypt", region "Cairo", city "Nasr City". If any part cannot be determined with confidence, return null for that part rather than guessing, and never infer a country from a phone code, a language, or a university name alone.';
 
 export interface CandidateScoreResult {
   overallScore: number;
@@ -281,6 +307,9 @@ Extract and return a JSON object with this structure:
     "email": string or null,
     "phone": string or null,
     "location": string or null,
+    "country": string or null,
+    "region": string or null,
+    "city": string or null,
     "linkedinUrl": string or null,
     "githubUrl": string or null,
     "portfolioUrl": string or null
@@ -325,11 +354,16 @@ Extract and return a JSON object with this structure:
       "proficiency": string or null
     }
   ],
-  "summary": string (REQUIRED - a brief 2-3 sentence professional summary highlighting the candidate's key strengths, experience level, and main skills. Always provide this field.)
+  "summary": string (REQUIRED - a brief 2-3 sentence professional summary highlighting the candidate's key strengths, experience level, and main skills. Always provide this field.),
+  "totalExperienceYears": number or null,
+  "highestEducationLevel": "HIGH_SCHOOL" | "DIPLOMA" | "BACHELOR" | "MASTER" | "DOCTORATE" | null
 }
 
 Be thorough in extracting skills for ANY profession - include domain/industry skills, tools and software, methodologies, languages, certifications, and soft skills (e.g., technical skills and frameworks for engineers, but equally sales, marketing, finance, design, operations, healthcare, or other domain skills where relevant).
 For experience, list most recent first. Mark "current": true for current positions.
+For "location", return the raw location string exactly as written on the CV. ${LOCATION_INSTRUCTION}
+${experienceYearsInstruction()}
+${EDUCATION_LEVEL_INSTRUCTION}
 The summary field is REQUIRED - always generate a professional summary even if the CV content is minimal.
 Only respond with valid JSON, no additional text.`;
 
@@ -345,6 +379,50 @@ Only respond with valid JSON, no additional text.`;
     } catch (error) {
       console.error('CV parsing error:', error);
       throw new InternalServerErrorException('Failed to parse CV');
+    }
+  }
+
+  /**
+   * Derives filter facets from already-parsed CV data, without re-reading the
+   * CV. Used to backfill candidates parsed before these facets existed.
+   */
+  async deriveProfileFacets(input: {
+    experience: unknown;
+    education: unknown;
+    location: string | null;
+  }): Promise<ProfileFacetsResult> {
+    const prompt = `Derive normalized profile facets from this already-parsed candidate data.
+
+Experience: ${JSON.stringify(input.experience ?? []).slice(0, 4000)}
+Education: ${JSON.stringify(input.education ?? []).slice(0, 2000)}
+Location: ${input.location ? JSON.stringify(input.location) : 'null'}
+
+Return a JSON object with exactly this structure:
+{
+  "totalExperienceYears": number or null,
+  "highestEducationLevel": "HIGH_SCHOOL" | "DIPLOMA" | "BACHELOR" | "MASTER" | "DOCTORATE" | null,
+  "country": string or null,
+  "region": string or null,
+  "city": string or null
+}
+
+${experienceYearsInstruction()}
+${EDUCATION_LEVEL_INSTRUCTION}
+${LOCATION_INSTRUCTION} If the location is null, return null for all three parts.
+Only respond with valid JSON, no additional text.`;
+
+    try {
+      const content = await this.chatCompletion(prompt, {
+        temperature: 0,
+        jsonMode: true,
+        developerInstruction:
+          'You are RecDesk AI. Normalize candidate profile data conservatively and respond strictly with the requested JSON object.',
+      });
+
+      return JSON.parse(content) as ProfileFacetsResult;
+    } catch (error) {
+      console.error('Profile facet derivation error:', error);
+      throw new InternalServerErrorException('Failed to derive profile facets');
     }
   }
 

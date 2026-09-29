@@ -23,8 +23,13 @@ model Company {
   status           CompanyStatus @default(ACTIVE) // Platform-admin controlled suspension
   stripeCustomerId String?       @unique // Stripe customer ID
   lastActivityAt   DateTime? // Track last user activity for smart email polling
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+
+  // SENSITIVE. Opt-in per customer; when false, gender is never accepted by
+  // the API nor surfaced in the UI.
+  collectGenderData Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   users                 User[]
   jobs                  Job[]
@@ -39,6 +44,10 @@ model Company {
   interviews            Interview[]
   documentRequests      DocumentRequest[]
   documentTemplateItems DocumentTemplateItem[]
+  pipelineTemplates     PipelineTemplate[]
+  channelCosts          ChannelCost[]
+  savedCandidateViews   SavedCandidateView[]
+  scheduledEmails       ScheduledEmail[]
 
   @@map("companies")
 }
@@ -78,22 +87,34 @@ model User {
   microsoftId String? @unique
   avatarUrl   String? // Profile picture from OAuth
 
+  // Shareable referral-link code. Null until the user first requests their
+  // link (GET /referrals/my-link generates it lazily), so no backfill.
+  referralCode String? @unique
+
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  candidateNotes          CandidateNote[]
-  candidateActions        CandidateAction[]
-  emailsSent              EmailSent[]
-  refreshTokens           RefreshToken[]
-  passwordResetTokens     PasswordResetToken[]
-  notifications           Notification[]
-  sentInvitations         Invitation[]          @relation("InvitationInviter")
-  createdInterviews       Interview[]           @relation("InterviewCreatedBy")
-  assignedInterviews      Interview[]           @relation("InterviewInterviewer")
-  availabilitySchedule    AvailabilitySchedule?
-  interviewEvaluations    InterviewEvaluation[]
-  evaluationHistoryEdits  InterviewEvaluationHistory[]
-  createdDocumentRequests DocumentRequest[]     @relation("DocumentRequestCreatedBy")
+  candidateNotes                CandidateNote[]
+  candidateActions              CandidateAction[]
+  emailsSent                    EmailSent[]
+  refreshTokens                 RefreshToken[]
+  passwordResetTokens           PasswordResetToken[]
+  notifications                 Notification[]
+  sentInvitations               Invitation[]                 @relation("InvitationInviter")
+  createdInterviews             Interview[]                  @relation("InterviewCreatedBy")
+  assignedInterviews            Interview[]                  @relation("InterviewInterviewer")
+  availabilitySchedule          AvailabilitySchedule?
+  interviewEvaluations          InterviewEvaluation[]
+  evaluationHistoryEdits        InterviewEvaluationHistory[]
+  createdDocumentRequests       DocumentRequest[]            @relation("DocumentRequestCreatedBy")
+  savedCandidateViews           SavedCandidateView[]
+  savedViewAlerts               SavedViewAlert[]
+  createdScheduledEmails        ScheduledEmail[]             @relation("ScheduledEmailCreatedBy")
+  cancelledScheduledEmails      ScheduledEmail[]             @relation("ScheduledEmailCancelledBy")
+  referredCandidates            Candidate[]                  @relation("CandidateReferrer")
+  interviewFeedback             InterviewFeedback[]          @relation("FeedbackInterviewer")
+  stageInterviewAssignments     CandidateStageInterviewer[]  @relation("StageInterviewer")
+  stageInterviewAssignmentsMade CandidateStageInterviewer[]  @relation("StageInterviewerAssignedBy")
 
   @@index([companyId])
   @@index([googleId])
@@ -203,13 +224,14 @@ model Job {
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  candidates           Candidate[]
-  candidateScores      CandidateScore[]
+  candidates            Candidate[]
+  candidateScores       CandidateScore[]
   candidateScoreHistory CandidateScoreHistory[]
-  pipelineStages       PipelineStage[]
-  interviews           Interview[]
-  interviewEvaluations InterviewEvaluation[]
-  documentRequests     DocumentRequest[]
+  pipelineStages        PipelineStage[]
+  interviews            Interview[]
+  interviewEvaluations  InterviewEvaluation[]
+  interviewFeedback     InterviewFeedback[]
+  documentRequests      DocumentRequest[]
 
   @@index([companyId, status])
   @@index([companyId, createdAt])
@@ -236,14 +258,29 @@ model PipelineStage {
   orderIndex Int
   color      String  @default("#3B82F6")
   isDefault  Boolean @default(false)
+  // Drives Candidate.status when a candidate is moved into this stage.
+  // Nullable for rows created before custom pipelines; code falls back to a
+  // name-based category (see pipeline-stage.util.ts).
+  category   StageCategory?
 
   jobId String
   job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
-  candidates CandidateStage[]
+  candidates           CandidateStage[]
+  interviewFeedback    InterviewFeedback[]
+  assignedInterviewers CandidateStageInterviewer[]
+  currentCandidates    Candidate[]                 @relation("CandidateCurrentStage")
 
   @@index([jobId, orderIndex])
   @@map("pipeline_stages")
+}
+
+enum StageCategory {
+  NEW
+  SCREENING
+  INTERVIEW
+  OFFER
+  HIRED
 }
 
 // ============================================
@@ -251,9 +288,11 @@ model PipelineStage {
 // ============================================
 
 model Candidate {
-  id     String          @id @default(uuid())
-  source CandidateSource @default(UPLOAD)
-  status CandidateStatus @default(NEW)
+  id            String                  @id @default(uuid())
+  source        CandidateSource         @default(UPLOAD)
+  sourceChannel CandidateSourceChannel?
+  sourceDetail  String?
+  status        CandidateStatus         @default(NEW)
 
   // Personal Info
   fullName     String
@@ -263,6 +302,29 @@ model Candidate {
   linkedinUrl  String?
   githubUrl    String?
   portfolioUrl String?
+
+  // Structured location, normalized by AI parsing where possible. Nullable:
+  // older candidates and low-confidence extractions keep only `location`.
+  country String?
+  region  String?
+  city    String?
+
+  // SENSITIVE PERSONAL DATA. Only ever populated when the owning company has
+  // `collectGenderData` enabled; never inferred from a CV or a name.
+  gender CandidateGender?
+
+  // Filter facets, derived from the parsed CV JSON by deriveCandidateFacets
+  // (candidate-facets.util.ts). The JSON columns below stay the source of
+  // truth for display; these exist only so filters can be indexed.
+  skillsNormalized     String[]        @default([]) // lowercased, deduped
+  languageNames        String[]        @default([]) // lowercased
+  currentTitle         String?
+  currentCompany       String?
+  university           String?
+  totalExperienceYears Float?
+  educationLevel       EducationLevel?
+  // Null until facets have been derived; drives backfill-candidate-facets.ts.
+  facetsDerivedAt      DateTime?
 
   // CV Files
   cvFileUrl            String
@@ -298,6 +360,17 @@ model Candidate {
   startDate          DateTime? @db.Date
   welcomeEmailSentAt DateTime?
 
+  // Reports — set once when status transitions NEW->HIRED (never
+  // overwritten on later unrelated updates). Nullable: absent for every
+  // candidate never hired.
+  hiredAt DateTime?
+
+  // Set by bulk/reject; cleared when the candidate leaves REJECTED (the
+  // history stays in CandidateAction). Null for rejections recorded before
+  // reasons existed.
+  rejectionReason RejectionReason?
+  rejectionNote   String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -307,8 +380,19 @@ model Candidate {
   jobId String?
   job   Job?    @relation(fields: [jobId], references: [id], onDelete: SetNull)
 
+  // Position in the job's pipeline. Null = derive from status (candidates
+  // created before custom pipelines, or not yet moved).
+  currentStageId String?
+  currentStage   PipelineStage? @relation("CandidateCurrentStage", fields: [currentStageId], references: [id], onDelete: SetNull)
+
   emailImportId String?      @unique
   emailImport   EmailImport? @relation(fields: [emailImportId], references: [id])
+
+  // Referrals — set only when submitted through a referral link. The code is
+  // kept alongside the FK as an audit trail if the referrer is later deleted.
+  referredByUserId String?
+  referredBy       User?   @relation("CandidateReferrer", fields: [referredByUserId], references: [id], onDelete: SetNull)
+  referralCode     String?
 
   scores               CandidateScore[]
   scoreHistory         CandidateScoreHistory[]
@@ -318,15 +402,31 @@ model Candidate {
   emailsSent           EmailSent[]
   interviews           Interview[]
   interviewEvaluations InterviewEvaluation[]
+  interviewFeedback    InterviewFeedback[]
+  stageInterviewers    CandidateStageInterviewer[]
   documentRequests     DocumentRequest[]
+  scheduledEmails      ScheduledEmail[]
 
   @@index([companyId, overallScore])
   @@index([companyId, createdAt])
   @@index([companyId, jobId])
   @@index([companyId, status])
   @@index([companyId, source])
+  @@index([companyId, sourceChannel])
+  @@index([companyId, referredByUserId])
+  @@index([companyId, hiredAt])
+  @@index([companyId, country])
+  @@index([companyId, region])
+  @@index([companyId, city])
+  @@index([companyId, totalExperienceYears])
+  @@index([companyId, educationLevel])
+  @@index([companyId, updatedAt])
+  @@index([skillsNormalized], type: Gin)
+  @@index([languageNames], type: Gin)
+  @@index([tags], type: Gin)
   @@index([email])
   @@index([jobId])
+  @@index([currentStageId])
   @@map("candidates")
 }
 
@@ -338,6 +438,18 @@ enum CandidateSource {
   MANUAL
 }
 
+enum CandidateSourceChannel {
+  EMAIL_INBOX
+  BULK_UPLOAD
+  REFERRAL
+  WUZZUF
+  TANQEEB
+  CAREER_FAIR
+  LINKEDIN
+  DIRECT_APPLY
+  OTHER
+}
+
 enum CandidateStatus {
   NEW
   SCREENING
@@ -347,6 +459,77 @@ enum CandidateStatus {
   HIRED
   REJECTED
   WITHDRAWN
+}
+
+enum RejectionReason {
+  NOT_QUALIFIED
+  INSUFFICIENT_EXPERIENCE
+  SKILLS_MISMATCH
+  SALARY_EXPECTATIONS
+  LOCATION
+  POSITION_FILLED
+  NO_RESPONSE
+  OTHER
+}
+
+// SENSITIVE. Recruiter-entered only, behind Company.collectGenderData.
+enum CandidateGender {
+  MALE
+  FEMALE
+  OTHER
+  UNDISCLOSED
+}
+
+// Declared lowest to highest: "minimum level" filters rely on this order.
+enum EducationLevel {
+  HIGH_SCHOOL
+  DIPLOMA
+  BACHELOR
+  MASTER
+  DOCTORATE
+}
+
+// A named, reusable candidate-list filter. `query` is the list page's URL
+// query string, so a view keeps working as new filters are added.
+model SavedCandidateView {
+  id        String   @id @default(uuid())
+  name      String
+  query     String
+  isShared  Boolean  @default(false) // visible to the whole company when true
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  alerts SavedViewAlert[]
+
+  @@unique([userId, name])
+  @@index([companyId, isShared])
+  @@map("saved_candidate_views")
+}
+
+// A user's subscription to new candidates matching a saved view (their own
+// or a shared one). lastCheckedAt starts at creation, so only candidates
+// added afterwards ever notify.
+model SavedViewAlert {
+  id            String    @id @default(uuid())
+  emailDigest   Boolean   @default(true)
+  lastCheckedAt DateTime  @default(now())
+  lastDigestAt  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  userId String
+  user   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  viewId String
+  view   SavedCandidateView @relation(fields: [viewId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, viewId])
+  @@index([viewId])
+  @@map("saved_view_alerts")
 }
 
 model CandidateScore {
@@ -393,7 +576,7 @@ model CandidateScoreHistory {
   bonusScore       Int?
   scoreExplanation Json?
   recommendation   String?
-  algorithmVersion String   @default("v1.0")
+  algorithmVersion String  @default("v1.0")
   source           String? // which pipeline recorded this event (debugging aid)
 
   scoredAt DateTime @default(now())
@@ -470,6 +653,68 @@ model InterviewEvaluationHistory {
 
   @@index([interviewEvaluationId, createdAt])
   @@map("interview_evaluation_history")
+}
+
+enum FeedbackRecommendation {
+  STRONG_YES
+  YES
+  NO
+  STRONG_NO
+}
+
+// Structured per-stage interviewer feedback. Anchored to a PipelineStage of
+// the candidate's job. Separate from InterviewEvaluation (legacy per-job
+// scorecard), which is kept read-only.
+model InterviewFeedback {
+  id String @id @default(uuid())
+
+  rating         Int // 1-5
+  notes          String?
+  recommendation FeedbackRecommendation
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  jobId String
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  stageId String
+  stage   PipelineStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  interviewerId String
+  interviewer   User   @relation("FeedbackInterviewer", fields: [interviewerId], references: [id], onDelete: Cascade)
+
+  @@unique([candidateId, stageId, interviewerId])
+  @@index([candidateId])
+  @@index([jobId])
+  @@map("interview_feedback")
+}
+
+// Interviewers assigned to a candidate for a given pipeline stage.
+model CandidateStageInterviewer {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  stageId String
+  stage   PipelineStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("StageInterviewer", fields: [userId], references: [id], onDelete: Cascade)
+
+  // SetNull: removing the assigning user must not remove the assignment.
+  assignedById String?
+  assignedBy   User?   @relation("StageInterviewerAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@unique([candidateId, stageId, userId])
+  @@index([candidateId])
+  @@index([userId])
+  @@map("candidate_stage_interviewers")
 }
 
 model CandidateStage {
@@ -725,6 +970,24 @@ model DocumentTemplateItem {
   @@map("document_template_items")
 }
 
+// Reusable hiring pipeline blueprint. Stages are copied into a job at
+// creation time, so editing/deleting a template never affects existing jobs.
+model PipelineTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  isDefault Boolean  @default(false)
+  stages    Json // [{ name, category, color }] in order
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@map("pipeline_templates")
+}
+
 // ============================================
 // RECURRING AVAILABILITY (Calendly-style weekly hours)
 // ============================================
@@ -872,6 +1135,8 @@ model EmailTemplate {
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
+  scheduledEmails ScheduledEmail[]
+
   @@index([companyId])
   @@index([companyId, type])
   @@map("email_templates")
@@ -905,6 +1170,46 @@ model EmailSent {
   @@index([candidateId])
   @@index([sentById])
   @@map("emails_sent")
+}
+
+enum ScheduledEmailStatus {
+  PENDING
+  SENDING
+  SENT
+  CANCELLED
+  FAILED
+}
+
+// A templated candidate email to be sent later by ScheduledEmailScheduler
+// (e.g. a rejection email delayed so it can still be cancelled). Rendering
+// happens at send time.
+model ScheduledEmail {
+  id              String               @id @default(uuid())
+  purpose         String // e.g. "rejection"
+  subjectOverride String?
+  sendAt          DateTime
+  status          ScheduledEmailStatus @default(PENDING)
+  sentAt          DateTime?
+  cancelledAt     DateTime?
+  error           String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  companyId     String
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  candidateId   String
+  candidate     Candidate      @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  templateId    String?
+  template      EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  createdById   String?
+  createdBy     User?          @relation("ScheduledEmailCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  cancelledById String?
+  cancelledBy   User?          @relation("ScheduledEmailCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+
+  @@index([status, sendAt])
+  @@index([candidateId, status])
+  @@index([companyId, status])
+  @@map("scheduled_emails")
 }
 
 // ============================================
@@ -988,6 +1293,23 @@ enum UsageType {
   EMAIL_IMPORTED
 }
 
+// Reports — optional manual spend input per source channel, used to compute
+// cost-per-hire in the source-effectiveness report. Absent rows simply mean
+// cost-per-hire isn't shown for that channel; nothing else depends on this.
+model ChannelCost {
+  id          String                 @id @default(uuid())
+  channel     CandidateSourceChannel
+  monthlyCost Int // In cents, matches Invoice/SubscriptionPlan money convention
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, channel])
+  @@map("channel_costs")
+}
+
 model Invoice {
   id               String        @id @default(uuid())
   stripeInvoiceId  String        @unique
@@ -1038,6 +1360,10 @@ enum NotificationType {
   INTERVIEW_SCHEDULED // Candidate booked an interview slot
   // Document collection
   DOCUMENT_UPLOADED // Candidate uploaded/completed requested documents
+  // Saved-view alerts
+  SAVED_VIEW_MATCH // New candidates match a saved view the user follows
+  // Interview feedback
+  INTERVIEWER_ASSIGNED // User was assigned to interview a candidate for a stage
 }
 
 model Notification {

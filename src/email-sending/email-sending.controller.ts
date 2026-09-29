@@ -4,7 +4,8 @@ import {
   Post,
   Body,
   Query,
-  ParseUUIDPipe,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -14,7 +15,14 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { EmailSendingService } from './email-sending.service';
-import { SendEmailDto, BulkSendEmailDto, PreviewEmailDto } from './dto';
+import {
+  SendEmailDto,
+  BulkSendEmailDto,
+  PreviewEmailDto,
+  QueryScheduledEmailsDto,
+  CancelScheduledEmailsDto,
+} from './dto';
+import { ScheduledEmailsService } from './scheduled-emails.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserData } from '../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
@@ -23,7 +31,10 @@ import { RequirePermissions } from '../common/decorators/permissions.decorator';
 @ApiBearerAuth()
 @Controller('emails')
 export class EmailSendingController {
-  constructor(private emailSendingService: EmailSendingService) {}
+  constructor(
+    private emailSendingService: EmailSendingService,
+    private scheduledEmails: ScheduledEmailsService,
+  ) {}
 
   @Post('send')
   @RequirePermissions('sendEmails')
@@ -63,6 +74,34 @@ export class EmailSendingController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.emailSendingService.previewEmail(dto, user.companyId, user.id);
+  }
+
+  @Get('scheduled')
+  @RequirePermissions('sendEmails')
+  @ApiOperation({ summary: 'List scheduled emails (pending first)' })
+  @ApiResponse({ status: 200, description: 'Scheduled emails retrieved' })
+  async listScheduled(
+    @Query() query: QueryScheduledEmailsDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.scheduledEmails.list(user.companyId, query.candidateId);
+  }
+
+  @Post('scheduled/cancel')
+  @RequirePermissions('sendEmails')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cancel scheduled emails that have not been sent yet' })
+  @ApiResponse({ status: 200, description: 'Number of emails cancelled' })
+  async cancelScheduled(
+    @Body() dto: CancelScheduledEmailsDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    const cancelled = await this.scheduledEmails.cancel(
+      user.companyId,
+      dto.ids,
+      user.id,
+    );
+    return { cancelled };
   }
 
   @Get('sent')

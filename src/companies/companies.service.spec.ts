@@ -140,6 +140,59 @@ describe('CompaniesService', () => {
       });
       expect(result.domain).toBe('acme.io');
     });
+
+    it('persists collectGenderData when turned off', async () => {
+      prisma.user.findUnique.mockResolvedValue({ companyId });
+      prisma.company.findFirst.mockResolvedValue(null);
+      prisma.company.update.mockResolvedValue({
+        id: companyId,
+        name: 'Acme',
+        domain: null,
+        mode: 'FULL_ATS',
+        plan: 'STARTER',
+        collectGenderData: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const result = await service.update(
+        companyId,
+        { collectGenderData: false },
+        userId,
+        UserRole.ADMIN,
+      );
+
+      expect(prisma.company.update).toHaveBeenCalledWith({
+        where: { id: companyId },
+        data: { collectGenderData: false },
+      });
+      expect(result.collectGenderData).toBe(false);
+    });
+
+    it('omits collectGenderData from the payload when not provided', async () => {
+      prisma.user.findUnique.mockResolvedValue({ companyId });
+      prisma.company.findFirst.mockResolvedValue(null);
+      prisma.company.update.mockResolvedValue({
+        id: companyId,
+        name: 'Acme Inc',
+        domain: null,
+        mode: 'FULL_ATS',
+        plan: 'STARTER',
+        collectGenderData: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await service.update(
+        companyId,
+        { name: 'Acme Inc' },
+        userId,
+        UserRole.ADMIN,
+      );
+
+      const call = prisma.company.update.mock.calls[0][0];
+      expect(call.data).not.toHaveProperty('collectGenderData');
+    });
   });
 
   describe('getStats', () => {

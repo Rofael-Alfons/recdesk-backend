@@ -22,7 +22,7 @@ export const SkipSubscriptionStatusCheck = () => (target: any, key: string, desc
 };
 
 // Subscription statuses that indicate an inactive subscription
-const INACTIVE_STATUSES: SubscriptionStatus[] = [
+export const INACTIVE_STATUSES: SubscriptionStatus[] = [
   'CANCELED',
   'UNPAID',
   'INCOMPLETE_EXPIRED',
